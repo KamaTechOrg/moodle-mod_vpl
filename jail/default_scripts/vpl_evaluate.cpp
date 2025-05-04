@@ -1679,6 +1679,7 @@
 			close(process.outPipe[1]);
 
 			setpgrp();
+			
 
 			// Execute program
 			execve(process.command, (char *const *)argv, (char *const *)envv);
@@ -1815,6 +1816,7 @@
 			dup2(pp2[1], STDOUT_FILENO);
 			dup2(STDOUT_FILENO, STDERR_FILENO);
 			setpgrp();
+			auto startChildTimer = chrono::high_resolution_clock::now();  
 			execve(command, (char *const *)argv, (char *const *)envv);
 			perror("Internal error, execve fails");
 			abort(); //end of child
@@ -1868,6 +1870,12 @@
 				}
 			}
 		}
+
+		auto endChildTimer = chrono::high_resolution_clock::now(); 
+		std::cout << "Elapsed Time (ms): " << elapsedTime.count() << std::endl;
+		auto childDuration = chrono::duration_cast<chrono::milliseconds>(endChildTimer - startChildTimer);
+		cout << "Child process ran for: " << childDuration.count() << " milliseconds" << endl;
+	
 		
 		//Added by Tamar
 		auto endInMs = chrono::high_resolution_clock::now();
