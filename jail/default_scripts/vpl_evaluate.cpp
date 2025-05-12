@@ -37,6 +37,13 @@
 	#include <sys/resource.h>
 	#include <iomanip>
 	#include "json.hpp"
+	 //added by michal
+	#include <linux/perf_event.h>
+	 #include <sys/syscall.h>
+	 #include <unistd.h>
+	 #include <sys/ioctl.h>
+	 #include <cstring>
+	 #include <stdio.h>
 
 
 	using namespace std;
@@ -1905,6 +1912,11 @@
 
 	}
 
+ // michal
+ int perf_event_open(struct perf_event_attr *hw_event, pid_t pid, int cpu,
+	int group_fd, unsigned long flags) {
+	  return syscall(__NR_perf_event_open, hw_event, pid, cpu, group_fd, flags);
+}
 
 
 
@@ -1915,6 +1927,24 @@
 
 		input = processArrayInput(input);
 		elapsedTime = chrono::milliseconds(0);
+		 //michal
+		 struct perf_event_attr pe;
+		 memset(&pe, 0, sizeof(struct perf_event_attr));
+		 pe.type = PERF_TYPE_HARDWARE;
+		 pe.size = sizeof(struct perf_event_attr);
+		 pe.config = PERF_COUNT_HW_INSTRUCTIONS;
+		 pe.disabled = 1;
+		 pe.exclude_kernel = 1;
+		 pe.exclude_hv = 1;
+	 
+		 int perfFd = perf_event_open(&pe, getpid(), -1, -1, 0);
+		 if (perfFd == -1) {
+			 perror("perf_event_open");
+		 } else {
+			 ioctl(perfFd, PERF_EVENT_IOC_RESET, 0);
+			 ioctl(perfFd, PERF_EVENT_IOC_ENABLE, 0);
+		 }
+		 //
 		maxResidentSetSize = 0;
 		userTime = {0, 0};
 		systemTime = {0, 0};
@@ -2067,9 +2097,59 @@
 
 		correctExitCode = isExitCodeTested() && expectedExitCode == exitCode;
 		correctOutput = match(studentProcess.output) || match(programOutputBefore + studentProcess.output);
+         //michal
+	 // PERF RESULTS
+ if (perfFd != -1) {
+	ioctl(perfFd, PERF_EVENT_IOC_DISABLE, 0);
+	long long instructions = 0;
+	read(perfFd, &instructions, sizeof(long long));
+	close(perfFd);
+
+	printf("\n===== Performance Summary =====\n");
+	printf("Instructions executed (parent process): %lld\n", instructions);
+	printf("Elapsed time (ms): %lld\n", elapsedTime.count());
+	printf("User time (s): %ld.%06ld\n", userTime.tv_sec, userTime.tv_usec);
+	printf("System time (s): %ld.%06ld\n", systemTime.tv_sec, systemTime.tv_usec);
+	printf("Max resident set size (KB): %ld\n", maxResidentSetSize);
+	printf("================================\n");
+	
+
+typedef struct {
+	char variation[50];
+	long long runTime;
+	long long cpuTime;
+	long long memoryUsage;
+	long long instructions;
+	char output[100];
+} TestResult;
+
+void printPerformanceSummary(TestResult tests[], int num_tests, double meanBefore, double stdDeviation, double meanAfter) {
+	// הצגת כותרת
+	printf("\n===== Performance Summary =====\n");
+	printf("| %-15s | %-20s | %-15s | %-15s | %-15s |\n", "Variation", "Run Time (ms)", "CPU Time (ms)", "Memory (KB)", "Output");
+	printf("|-----------------|----------------------|-------------------|-------------------|------------------|\n");
+
+	// הצגת תוצאות כל מבחן
+	for (int i = 0; i < num_tests; i++) {
+		printf("| %-15s | %-20lld | %-15lld | %-15lld | %-15s |\n", 
+			tests[i].variation,
+			tests[i].runTime,
+			tests[i].cpuTime,
+			tests[i].memoryUsage,
+			tests[i].output);
+	}
+
+	// הצגת תוצאות ממוצע וסטיית תקן
+	printf("\n==============================\n");
+	printf("Mean Before: %.2f\n", meanBefore);
+	printf("Standard Deviation: %.2f\n", stdDeviation);
+	printf("Mean After: %.2f\n", meanAfter);
+	printf("==============================\n");
+}
 
 		compareAndPrintResults(studentProcess, teacherProcess);
 
+		}
 	}
 
 
@@ -2684,6 +2764,27 @@
 
 		//Added by Tamar
 		Timer::startInMs();
+		//michal
+		   // נתוני דוגמה
+		   TestResult tests[] = {
+			{"Variation 1", 42, 36, 4292608, "100000"},
+			{"Variation 2", 39, 37, 4292608, "100000"},
+			{"Test file input2", 2, 2, 1916928, "Error: file data2.txt not found"},
+			{"Variation 3", 375, 365, 27688960, "1000000"}
+		};
+	
+		int num_tests = sizeof(tests) / sizeof(tests[0]);
+		
+		// ממוצע וסטיית תקן לדוגמה
+		double meanBefore = 1.01;
+		double stdDeviation = 0.00;
+		double meanAfter = 1.01;
+	
+		// קריאה לפונקציה להדפסת התוצאות
+		printPerformanceSummary(tests, num_tests, meanBefore, stdDeviation, meanAfter);
+	
+		return 0;
+		//
 
 		TestCase::setEnvironment(env);
 		setSignalsCatcher();
