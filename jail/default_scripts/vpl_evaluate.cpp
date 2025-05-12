@@ -1847,8 +1847,6 @@
 		while ((pidr = wait4(pid, &status, WNOHANG | WUNTRACED, &ru)) == 0) {
 			readWrite(fdread, fdwrite);
 			usleep(5000);
-	
-
 			// TERMSIG or timeout or program output too large?
 			if (Stop::isTERMRequested() || (time(NULL) - start) >= timeout || outputTooLarge) { //Changed by Tamar
 				
@@ -1871,27 +1869,16 @@
 				}
 			}
 		}
-
-		// auto endChildTimer = chrono::high_resolution_clock::now(); 
-		// std::cout << "Elapsed Time (ms): " << elapsedTime.count() << std::endl;
-		// auto childDuration = chrono::duration_cast<chrono::milliseconds>(endChildTimer - startChildTimer);
-		// cout << "Child process ran for: " << childDuration.count() << " milliseconds" << endl;
-	
-		
 		// Calculate elapsed time in milliseconds
 		auto endInMs = chrono::high_resolution_clock::now();
 		elapsedTime = chrono::duration_cast<chrono::milliseconds>(endInMs - startInMs);
 		userTime = ru.ru_utime;  // user CPU time
 		systemTime = ru.ru_stime;  // system CPU time
-	
-		// Calculate total child CPU time in microseconds
 		long user_sec = ru.ru_utime.tv_sec;
 		long user_usec = ru.ru_utime.tv_usec;
 		long sys_sec = ru.ru_stime.tv_sec;
 		long sys_usec = ru.ru_stime.tv_usec;
-	
 		long childCpuTimeMicroseconds = (user_sec + sys_sec) * 1'000'000 + (user_usec + sys_usec);
-		
 		std::cout << "Child CPU Time (microseconds): " << childCpuTimeMicroseconds << " μs" << std::endl;
 		std::cout << "User CPU Time (seconds): " << user_sec + user_usec / 1'000'000.0 << " seconds" << std::endl;
 		std::cout << "System CPU Time (seconds): " << sys_sec + sys_usec / 1'000'000.0 << " seconds" << std::endl;
