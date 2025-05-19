@@ -16,7 +16,8 @@
 	#include <sys/wait.h>
 	#include <poll.h>
 	#include <unistd.h>
-	#include <pty.h>
+	//#include <pty.h>
+	#include <util.h>
 	#include <fcntl.h>
 	#include <signal.h>
 	#include <cstring>
@@ -38,12 +39,15 @@
 	#include <iomanip>
 	#include "json.hpp"
 	 //added by michal
-	#include <linux/perf_event.h>
-	 #include <sys/syscall.h>
-	 #include <unistd.h>
-	 #include <sys/ioctl.h>
-	 #include <cstring>
-	 #include <stdio.h>
+	 #include <linux/perf_event.h>
+#include <asm/unistd.h>
+#include <sys/ioctl.h>
+#include <sys/syscall.h>
+#include <unistd.h>
+#include <cstring>
+#include <iostream>
+#include <fstream>
+#include <cstdint>
 
 
 	using namespace std;
@@ -1918,33 +1922,67 @@
 	  return syscall(__NR_perf_event_open, hw_event, pid, cpu, group_fd, flags);
 }
 
+int startPerfCounting(pid_t pid) {
+    struct perf_event_attr pe{};
+    memset(&pe, 0, sizeof(struct perf_event_attr));
+    pe.type = PERF_TYPE_HARDWARE;
+    pe.size = sizeof(struct perf_event_attr);
+    pe.config = PERF_COUNT_HW_INSTRUCTIONS;
+    pe.disabled = 1;
+    pe.exclude_kernel = 1;
+    pe.exclude_hv = 1;
+
+    int fd = perf_event_open(&pe, pid, -1, -1, 0);
+    if (fd == -1) {
+        std::cerr << "Error opening perf event: " << strerror(errno) << "\n";
+        return -1;
+    }
+
+    ioctl(fd, PERF_EVENT_IOC_RESET, 0);
+    ioctl(fd, PERF_EVENT_IOC_ENABLE, 0);
+    return fd;
+}
+uint64_t stopPerfCounting(int fd) {
+    ioctl(fd, PERF_EVENT_IOC_DISABLE, 0);
+    uint64_t count = 0;
+    ssize_t res = read(fd, &count, sizeof(count));
+    if (res != sizeof(count)) {
+        std::cerr << "Error reading perf counter\n";
+        count = 0;
+    }
+    close(fd);
+    return count;
+}
 
 
 
 	// Main runTest function
 	void TestCase::runTestWithCompare(time_t timeout, chrono::milliseconds timeoutInMs) {
 		time_t start = time(NULL);
+        //
+		int perfFd = startPerfCounting(getpid());
 
+		//
 		input = processArrayInput(input);
 		elapsedTime = chrono::milliseconds(0);
-		 //michal
-		 struct perf_event_attr pe;
-		 memset(&pe, 0, sizeof(struct perf_event_attr));
-		 pe.type = PERF_TYPE_HARDWARE;
-		 pe.size = sizeof(struct perf_event_attr);
-		 pe.config = PERF_COUNT_HW_INSTRUCTIONS;
-		 pe.disabled = 1;
-		 pe.exclude_kernel = 1;
-		 pe.exclude_hv = 1;
+		//  //michal
+		//  struct perf_event_attr pe;
+		//  memset(&pe, 0, sizeof(struct perf_event_attr));
+		//  pe.type = PERF_TYPE_HARDWARE;
+		//  pe.size = sizeof(struct perf_event_attr);
+		//  pe.config = PERF_COUNT_HW_INSTRUCTIONS;
+		//  pe.disabled = 1;
+		//  pe.exclude_kernel = 1;
+		//  pe.exclude_hv = 1;
 	 
-		 int perfFd = perf_event_open(&pe, getpid(), -1, -1, 0);
-		 if (perfFd == -1) {
-			 perror("perf_event_open");
-		 } else {
-			 ioctl(perfFd, PERF_EVENT_IOC_RESET, 0);
-			 ioctl(perfFd, PERF_EVENT_IOC_ENABLE, 0);
-		 }
-		 //
+		//  int perfFd = perf_event_open(&pe, getpid(), -1, -1, 0);
+		//  if (perfFd == -1) {
+		// 	 perror("perf_event_open");
+		//  } else {
+		// 	 ioctl(perfFd, PERF_EVENT_IOC_RESET, 0);
+		// 	 ioctl(perfFd, PERF_EVENT_IOC_ENABLE, 0);
+		//  }
+		//  //
 		maxResidentSetSize = 0;
 		userTime = {0, 0};
 		systemTime = {0, 0};
@@ -2097,60 +2135,70 @@
 
 		correctExitCode = isExitCodeTested() && expectedExitCode == exitCode;
 		correctOutput = match(studentProcess.output) || match(programOutputBefore + studentProcess.output);
-         //michal
-	 // PERF RESULTS
- if (perfFd != -1) {
-	ioctl(perfFd, PERF_EVENT_IOC_DISABLE, 0);
-	long long instructions = 0;
-	read(perfFd, &instructions, sizeof(long long));
-	close(perfFd);
+//          //michal
+// 	 // PERF RESULTS
+//  if (perfFd != -1) {
+// 	ioctl(perfFd, PERF_EVENT_IOC_DISABLE, 0);
+// 	long long instructions = 0;
+// 	read(perfFd, &instructions, sizeof(long long));
+// 	close(perfFd);
 
-	printf("\n===== Performance Summary =====\n");
-	printf("Instructions executed (parent process): %lld\n", instructions);
-	printf("Elapsed time (ms): %lld\n", elapsedTime.count());
-	printf("User time (s): %ld.%06ld\n", userTime.tv_sec, userTime.tv_usec);
-	printf("System time (s): %ld.%06ld\n", systemTime.tv_sec, systemTime.tv_usec);
-	printf("Max resident set size (KB): %ld\n", maxResidentSetSize);
-	printf("================================\n");
-	
+// 	printf("\n===== Performance Summary =====\n");
+// 	printf("Instructions executed (parent process): %lld\n", instructions);
+// 	printf("Elapsed time (ms): %lld\n", elapsedTime.count());
+// 	printf("User time (s): %ld.%06ld\n", userTime.tv_sec, userTime.tv_usec);
+// 	printf("System time (s): %ld.%06ld\n", systemTime.tv_sec, systemTime.tv_usec);
+// 	printf("Max resident set size (KB): %ld\n", maxResidentSetSize);
+// 	printf("================================\n");
+//  }	
 
-typedef struct {
-	char variation[50];
-	long long runTime;
-	long long cpuTime;
-	long long memoryUsage;
-	long long instructions;
-	char output[100];
-} TestResult;
+// typedef struct {
+// 	char variation[50];
+// 	long long runTime;
+// 	long long cpuTime;
+// 	long long memoryUsage;
+// 	long long instructions;
+// 	char output[100];
+// } TestResult;
 
-void printPerformanceSummary(TestResult tests[], int num_tests, double meanBefore, double stdDeviation, double meanAfter) {
-	// הצגת כותרת
-	printf("\n===== Performance Summary =====\n");
-	printf("| %-15s | %-20s | %-15s | %-15s | %-15s |\n", "Variation", "Run Time (ms)", "CPU Time (ms)", "Memory (KB)", "Output");
-	printf("|-----------------|----------------------|-------------------|-------------------|------------------|\n");
+// void printPerformanceSummary(TestResult tests[], int num_tests, double meanBefore, double stdDeviation, double meanAfter) {
+// 	// הצגת כותרת
+// 	printf("\n===== Performance Summary =====\n");
+// 	printf("| %-15s | %-20s | %-15s | %-15s | %-15s |\n", "Variation", "Run Time (ms)", "CPU Time (ms)", "Memory (KB)", "Output");
+// 	printf("|-----------------|----------------------|-------------------|-------------------|------------------|\n");
 
-	// הצגת תוצאות כל מבחן
-	for (int i = 0; i < num_tests; i++) {
-		printf("| %-15s | %-20lld | %-15lld | %-15lld | %-15s |\n", 
-			tests[i].variation,
-			tests[i].runTime,
-			tests[i].cpuTime,
-			tests[i].memoryUsage,
-			tests[i].output);
-	}
+// 	// הצגת תוצאות כל מבחן
+// 	for (int i = 0; i < num_tests; i++) {
+// 		printf("| %-15s | %-20lld | %-15lld | %-15lld | %-15s |\n", 
+// 			tests[i].variation,
+// 			tests[i].runTime,
+// 			tests[i].cpuTime,
+// 			tests[i].memoryUsage,
+// 			tests[i].output);
+// 	}
 
-	// הצגת תוצאות ממוצע וסטיית תקן
-	printf("\n==============================\n");
-	printf("Mean Before: %.2f\n", meanBefore);
-	printf("Standard Deviation: %.2f\n", stdDeviation);
-	printf("Mean After: %.2f\n", meanAfter);
-	printf("==============================\n");
-}
-
+// 	// הצגת תוצאות ממוצע וסטיית תקן
+// 	printf("\n==============================\n");
+// 	printf("Mean Before: %.2f\n", meanBefore);
+// 	printf("Standard Deviation: %.2f\n", stdDeviation);
+// 	printf("Mean After: %.2f\n", meanAfter);
+// 	printf("==============================\n");
+// }
+        //
+		if (perfFd != -1) {
+			uint64_t instructions = stopPerfCounting(perfFd);
+			std::cout << "PERF_COUNT_HW_INSTRUCTIONS (parent): " << instructions << std::endl;
+		
+			std::ofstream out("perf_parent.txt");
+			out << instructions << std::endl;
+			out.close();
+		}
+		
+		//
 		compareAndPrintResults(studentProcess, teacherProcess);
 
 		}
-	}
+	
 
 
 
@@ -2765,15 +2813,9 @@ void printPerformanceSummary(TestResult tests[], int num_tests, double meanBefor
 		//Added by Tamar
 		Timer::startInMs();
 		//michal
-		   // נתוני דוגמה
-		   TestResult tests[] = {
-			{"Variation 1", 42, 36, 4292608, "100000"},
-			{"Variation 2", 39, 37, 4292608, "100000"},
-			{"Test file input2", 2, 2, 1916928, "Error: file data2.txt not found"},
-			{"Variation 3", 375, 365, 27688960, "1000000"}
-		};
 	
-		int num_tests = sizeof(tests) / sizeof(tests[0]);
+	
+		//int num_tests = sizeof(tests) / sizeof(tests[0]);
 		
 		// ממוצע וסטיית תקן לדוגמה
 		double meanBefore = 1.01;
@@ -2781,9 +2823,9 @@ void printPerformanceSummary(TestResult tests[], int num_tests, double meanBefor
 		double meanAfter = 1.01;
 	
 		// קריאה לפונקציה להדפסת התוצאות
-		printPerformanceSummary(tests, num_tests, meanBefore, stdDeviation, meanAfter);
+		//printPerformanceSummary(tests, num_tests, meanBefore, stdDeviation, meanAfter);
 	
-		return 0;
+		//return 0;
 		//
 
 		TestCase::setEnvironment(env);
@@ -2791,6 +2833,9 @@ void printPerformanceSummary(TestResult tests[], int num_tests, double meanBefor
 		Evaluation* obj = Evaluation::getSinglenton();
 		obj->loadParams();
 		obj->loadTestCases("evaluate.cases");
+
+		std::cout << "Running tests..." << std::endl;
+
 		obj->runTests();
 		obj->outputEvaluation();
 		return EXIT_SUCCESS;
