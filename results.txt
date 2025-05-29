@@ -1,0 +1,142 @@
+diff --git a/.DS_Store b/.DS_Store
+index 18b3a6f6..0c7d0c57 100644
+Binary files a/.DS_Store and b/.DS_Store differ
+diff --git a/jail/default_scripts/vpl_evaluate.cpp b/jail/default_scripts/vpl_evaluate.cpp
+index 9dce501c..e22b5c7f 100644
+--- a/jail/default_scripts/vpl_evaluate.cpp
++++ b/jail/default_scripts/vpl_evaluate.cpp
+@@ -7,47 +7,54 @@
+ 
+ 
+ 	
+-	#include <cstdlib>
+-	#include <cstdio>
+-	#include <climits>
+-	#include <limits>
+-	#include <errno.h>
+-	#include <sys/types.h>
+-	#include <sys/wait.h>
+-	#include <poll.h>
+-	#include <unistd.h>
+-	//#include <pty.h>
+-	#include <util.h>
+-	#include <fcntl.h>
+-	#include <signal.h>
+-	#include <cstring>
+-	#include <string>
+-	#include <iostream>
+-	#include <sstream>
+-	#include <vector>
+-	#include <cmath>
+-	#include <execinfo.h>
+-	#include <regex.h>
+-	#include <string>
+-
+-	//Added by Tamar
+-	#include <chrono>
+-	#include <regex>
+-	#include <random>
+-	#include <fstream>
+-	#include <sys/resource.h>
+-	#include <iomanip>
+-	#include "json.hpp"
+-	 //added by michal
+-	 #include <linux/perf_event.h>
++	// ===== Kernel headers (perf_event) =====
++#include <linux/perf_event.h>
+ #include <asm/unistd.h>
+ #include <sys/ioctl.h>
+ #include <sys/syscall.h>
+-#include <unistd.h>
++
++// ===== C standard library headers =====
++#include <cstdlib>
++#include <cstdio>
++#include <cerrno>
++#include <climits>
+ #include <cstring>
++#include <cmath>
++#include <cstdint>
++
++// ===== POSIX / Unix system headers =====
++#include <unistd.h>
++#include <sys/types.h>
++#include <sys/wait.h>
++#include <poll.h>
++
++#include <pty.h>      // Requires libutil-dev
++//#include <util.h>     // May require libbsd-dev
++#include <fcntl.h>
++#include <signal.h>
++#include <sys/resource.h>
++#include <execinfo.h>
++#include <regex.h>
++
++
++// ===== C++ standard library headers =====
+ #include <iostream>
++#include <sstream>
+ #include <fstream>
+-#include <cstdint>
++#include <string>
++#include <vector>
++#include <chrono>
++#include <random>
++#include <regex>
++#include <iomanip>
++#include <limits>
++
++// ===== Project-specific headers =====
++#include "json.hpp"
++
++// הגדרה גלובלית (או בתוך קלאס שכולל את כל ההרצות)
++std::vector<TestResult> allResults;
++
+ 
+ 
+ 	using namespace std;
+@@ -1937,6 +1944,13 @@ int startPerfCounting(pid_t pid) {
+         std::cerr << "Error opening perf event: " << strerror(errno) << "\n";
+         return -1;
+     }
++	if (ioctl(fd, PERF_EVENT_IOC_RESET, 0) == -1) {
++		std::cerr << "Failed to reset perf counter: " << strerror(errno) << "\n";
++	}
++	if (ioctl(fd, PERF_EVENT_IOC_ENABLE, 0) == -1) {
++		std::cerr << "Failed to enable perf counter: " << strerror(errno) << "\n";
++	}
++	
+ 
+     ioctl(fd, PERF_EVENT_IOC_RESET, 0);
+     ioctl(fd, PERF_EVENT_IOC_ENABLE, 0);
+@@ -1961,7 +1975,7 @@ uint64_t stopPerfCounting(int fd) {
+ 		time_t start = time(NULL);
+         //
+ 		int perfFd = startPerfCounting(getpid());
+-
++		
+ 		//
+ 		input = processArrayInput(input);
+ 		elapsedTime = chrono::milliseconds(0);
+@@ -2185,8 +2199,21 @@ uint64_t stopPerfCounting(int fd) {
+ // 	printf("==============================\n");
+ // }
+         //
++		ioctl(perfFd, PERF_EVENT_IOC_DISABLE, 0);
++
+ 		if (perfFd != -1) {
+ 			uint64_t instructions = stopPerfCounting(perfFd);
++			TestResult result{};
++			strncpy(result.variation, "Parent", sizeof(result.variation) - 1);
++			result.runTime = elapsedTime.count();
++			result.cpuTime = (userTime.tv_sec + systemTime.tv_sec) * 1000 +
++							 (userTime.tv_usec + systemTime.tv_usec) / 1000;
++			result.memoryUsage = maxResidentSetSize;
++			result.instructions = instructions;
++			strncpy(result.output, correctOutput ? "Correct" : "Wrong", sizeof(result.output) - 1);
++		
++			allResults.push_back(result);  
++		}
+ 			std::cout << "PERF_COUNT_HW_INSTRUCTIONS (parent): " << instructions << std::endl;
+ 		
+ 			std::ofstream out("perf_parent.txt");
