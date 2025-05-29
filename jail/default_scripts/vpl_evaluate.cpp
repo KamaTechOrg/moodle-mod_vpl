@@ -334,7 +334,7 @@
 		 int expectedExitCode; // Default value numeric_limits<int>::min()
 		 int exitCode; // Default value numeric_limits<int>::min()
 		 string programOutputBefore, programOutputAfter, programInput;
-		 
+		 uint64_t cpuInstruction;
  
 		 //Added by Tamar
 		 string inputSize;
@@ -1260,6 +1260,7 @@
 		 programOutputBefore=o.programOutputBefore;
 		 programOutputAfter=o.programOutputAfter;
 		 programInput=o.programInput;
+		
  
 		 //Added by Tamar
 		 inputSize=o.inputSize;
@@ -1267,7 +1268,9 @@
 		 userTime = {0, 0};
 		 systemTime = {0, 0};
 		 cpuTimeRatio =0;
- 
+
+		 cpuInstructions=0;
+		 
 		 for(size_t i = 0; i < o.output.size(); i++){
 			 output.push_back(o.output[i]->clone());
 		 }
@@ -1378,7 +1381,11 @@
 	 string TestCase::getInputSize(){
 		 return inputSize;
 	 }
- 
+
+	 //added by michal
+	 uint64_t TestCase::getcpuInstructions(){
+		return cpuInstructions;
+	 }
 	 string TestCase::getCommentTitle(bool withGradeReduction=false) {
 		 char buf[100];
 		 string ret;
@@ -2138,12 +2145,6 @@
 		 correctExitCode = isExitCodeTested() && expectedExitCode == exitCode;
 		 correctOutput = match(studentProcess.output) || match(programOutputBefore + studentProcess.output);
 		 //
-
-		 if (perfFd != -1) {
-			 uint64_t instructions = stopPerfCounting(perfFd);
-			 
-		 }
-
 		 compareAndPrintResults(studentProcess, teacherProcess);
  
 	}
@@ -2724,7 +2725,7 @@
 	 void nullSignalCatcher(int n) {
 		 //printf("Signal %d\n",n);
 	 }
- 
+	
 	 void signalCatcher(int n) {
 		 //printf("Signal %d\n",n);
 		 if (Stop::isTERMRequested()) {
