@@ -320,7 +320,9 @@
 		chrono::duration<double> elapsedTime;
 		double cpuTimeRatio;
 
+	chrono::duration<double, std::milli> solutionElapsedTime;
 		//int elapsedTime;
+	chrono::duration<double, std::milli> studentRunTime;
 
 		void cutOutputTooLarge(string &output);
 		void readWrite(int fdread, int fdwrite);
@@ -334,6 +336,13 @@
 	    timeval userTime;    // User CPU time
 	    timeval systemTime;  // System CPU time
 		
+	chrono::duration<double, std::milli> getSolutionElapsedTime() const { return solutionElapsedTime; }
+	double getStudentRunTime() const {
+		return studentRunTime.count();
+	}
+	void setStudentRunTime(double runTime) {
+		studentRunTime = std::chrono::duration<double, std::milli>(runTime);
+	}
 
 		static void setEnvironment(const char **environment);
 		void setDefaultCommand();
@@ -1791,7 +1800,8 @@
 		elapsedTime = chrono::milliseconds(0);
 		int pp1[2]; // Send data
 		int pp2[2]; // Receive data
-		if (pipe(pp1) == -1 || pipe(pp2) == -1) {
+    int pp3[2]; 
+    if (pipe(pp1) == -1 || pipe(pp2) == -1 || pipe(pp3) == -1) {
 			executionError = true;
 			sprintf(executionErrorReason, "Internal error: pipe error (%s)", strerror(errno));
 			return;
@@ -1812,13 +1822,19 @@
 			// Execute
 			close(pp1[1]);
 			dup2(pp1[0], STDIN_FILENO);
+        close(pp1[0]);
 			close(pp2[0]);
 			dup2(pp2[1], STDOUT_FILENO);
+        close(pp2[1]);
 			dup2(STDOUT_FILENO, STDERR_FILENO);
+        close(pp3[0]);
+        dup2(pp3[1], 101); 
+        close(pp3[1]);
+        setenv("TIME_PIPE_FD", "101", 1);
 			setpgrp();
 			//auto startChildTimer = chrono::high_resolution_clock::now();  
-			execve(command, (char *const *)argv, (char *const *)envv);
-			perror("Internal error, execve fails");
+        execvp(command, (char* const*)argv);
+        perror("Internal error, execvp fails");
 			abort(); //end of child
 		}
 		if (pid == -1) {
@@ -1828,8 +1844,10 @@
 		}
 		close(pp1[0]);
 		close(pp2[1]);
+    close(pp3[1]);
 		int fdwrite = pp1[1];
 		int fdread = pp2[0];
+    int time_fd = pp3[0];
 		Tools::fdblock(fdwrite, false);
 		Tools::fdblock(fdread, false);
 		programInput = input;
@@ -1898,7 +1916,7 @@
 			}
 
 			//Added by Tamar
-			struct rusage ru;
+			//struct rusage ru;
 			if (getrusage(RUSAGE_CHILDREN, &ru) == 0) {
 				maxResidentSetSize = ru.ru_maxrss; // In kilobytes
 			}
@@ -1912,8 +1930,23 @@
 		correctExitCode = isExitCodeTested() && expectedExitCode == exitCode;
 		correctOutput = match(programOutputAfter) || match(programOutputBefore + programOutputAfter);
 		std::cout << "Elapsed Time (ms): " << elapsedTime.count() << std::endl;
-	}
+    char buf[100] = {0};
+    ssize_t nread = read(time_fd, buf, sizeof(buf) - 1);
+    if (nread > 0) {
+        buf[nread] = '\0';
+        double raw_ms = atof(buf);
+        solutionElapsedTime = std::chrono::duration<double, std::milli>(raw_ms);
 
+        std::cout << "Raw duration from pipe: " << raw_ms << " ms" << std::endl;
+        std::cout << "Solution Elapsed Time (ms): " << solutionElapsedTime.count() << std::endl;
+
+        // ** כאן העדכון שהוספנו **
+		studentRunTime = solutionElapsedTime;
+    } else {
+        std::cerr << "Failed to read timing data from pipe.\n";
+        studentRunTime = 0ms;
+	}
+}
 
 
 
@@ -2566,7 +2599,7 @@
 	#include <iomanip>
 	void Evaluation::outputEvaluation() {
 		
-		const char* stest[] = {" test", "tests"};
+    const char* stest[] = {" test", " tests"};
 		if (strlen(executionErrorReason) > 0) {
 			printf("\nExecution error: %s\n", executionErrorReason);
 		}
@@ -2609,44 +2642,50 @@
 			//     chrono::duration<double, milli> elapsed_ms = testCases[i].getElapsedTime();
 			//     printf("Test %d run time: %f ms\n", (int)i + 1, elapsed_ms.count());
 			// }
-			cout << left << setw(25) << "Test Case Name"
+			        cout << left 
+		//	cout << left << setw(25) << "Test Case Name"
+			 << setw(25) << "Test Case Name"
           << setw(15) << "Input Size"
           << setw(20) << "Run Time (ms)"
 		  << setw(20) << "CPU Time (ms)"
           << setw(20) << "Memory (KB)"
-          << endl;
+             << setw(20) << "Student Run Time (ms)"
+             << endl;
 
-			cout << string(100, '-') << endl;
+        cout << string(120, '-') << endl;
 
 			for (size_t i = 0; i < testCases.size(); ++i) {
 				string testName = testCases[i].getCaseDescription();
 				string inputSize = testCases[i].getInputSize();
-				chrono::duration<double, milli> elapsed_ms = testCases[i].getElapsedTime();
+            chrono::duration<double, std::milli> elapsed_ms = testCases[i].getElapsedTime();
 				long memoryKB = testCases[i].maxResidentSetSize;
 				double userTime_ms = testCases[i].userTime.tv_sec * 1000.0 + testCases[i].userTime.tv_usec / 1000.0;
 				double systemTime_ms = testCases[i].systemTime.tv_sec * 1000.0 + testCases[i].systemTime.tv_usec / 1000.0;
 				double totalCpuTime_ms = userTime_ms + systemTime_ms;
+            double studentRunTime = testCases[i].getStudentRunTime();
+
+            cout << left
+                 << setw(25) << testName
+                 << setw(15) << inputSize
+                 << setw(20) << fixed << setprecision(6) << elapsed_ms.count()
+                 << setw(20) << fixed << setprecision(6) << totalCpuTime_ms
+                 << setw(20) << memoryKB
+                 << setw(20) << fixed << setprecision(6) << studentRunTime
+                 << endl;
+        }
+    }
+    if (!noGrade) {
+        char buf[100];
+        sprintf(buf, "%5.2f", grade);
+        int len = strlen(buf);
+        if (len > 3 && strcmp(buf + (len - 3), ".00") == 0)
+            buf[len - 3] = 0;
+        printf("\nGrade :=>>%s\n", buf);
+    }
+    fflush(stdout);
+}
 
 
-				cout << left << setw(25) << testName
-						<< setw(15) << inputSize
-						<< setw(20) << fixed << setprecision(2) << elapsed_ms.count()
-						<< setw(20) << totalCpuTime_ms
-						<< setw(20) << memoryKB
-						<< endl;
-			}
-
-		}
-		if (!noGrade) {
-			char buf[100];
-			sprintf(buf, "%5.2f", grade);
-			int len = strlen(buf);
-			if (len > 3 && strcmp(buf + (len - 3), ".00") == 0)
-				buf[len - 3] = 0;
-			printf("\nGrade :=>>%s\n", buf);
-		}
-		fflush(stdout);
-	}
 
 	void nullSignalCatcher(int n) {
 		//printf("Signal %d\n",n);
