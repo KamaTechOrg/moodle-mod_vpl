@@ -334,7 +334,7 @@
 		 int expectedExitCode; // Default value numeric_limits<int>::min()
 		 int exitCode; // Default value numeric_limits<int>::min()
 		 string programOutputBefore, programOutputAfter, programInput;
-		 uint64_t cpuInstruction;
+		 uint64_t cpuInstructions;
  
 		 //Added by Tamar
 		 string inputSize;
