@@ -371,7 +371,8 @@
 		void writeInputToProcess(ProcessInfo& process, const string& input);
 		void checkProcessTermination(ProcessInfo& process);
 		void compareAndPrintResults(const ProcessInfo& studentProcess, const ProcessInfo& teacherProcess);
-		
+		void fillVectorsForTest(vector<double>& runtimes, vector<long>& inputSizes, size_t index);
+
 	};
 
 	/**
@@ -396,6 +397,8 @@
 		//Added by Tamar
 		char executionErrorReason[1000];
 
+		std::string bestComplexity;
+        double mse;
 
 	public:
 		static Evaluation* getSinglenton();
@@ -408,6 +411,8 @@
 		void addFatalError(const char *m);
 		void runTests();
 		void outputEvaluation();
+		void initializeVectors(vector<double>& runtimes, vector<long>& inputSizes, size_t numCases);
+        void analyzePerformance(const vector<double>& runtimes, const vector<long>& inputSizes);
 	};
 
 	/////////////////////////////////////////////////////////////////////////////////////////////////
@@ -2094,6 +2099,8 @@
 
 		//Added by Tamar
 		strcpy(executionErrorReason, "");
+		bestComplexity = "";
+        mse = 0.0;
 	}
 
 	Evaluation* Evaluation::getSinglenton() {
@@ -2109,6 +2116,60 @@
 			singlenton = NULL;
 		}
 	}
+
+	void Evaluation::analyzePerformance(const vector<double>& runtimes, const vector<long>& inputSizes) {
+        // Convert arrays to JSON strings
+        nlohmann::json j_inputSizes = inputSizes;
+        nlohmann::json j_runtimes = runtimes;
+        std::string inputSizes_str = j_inputSizes.dump();
+        std::string runtimes_str = j_runtimes.dump();
+
+        // שם הקובץ והנתיב ל-Python של הסביבה הווירטואלית
+        std::string scriptName = "python_script.py";
+        std::string pythonPath = "./venv/bin/python3"; // נתיב יחסי לסביבה הווירטואלית
+        std::string command = pythonPath + " " + scriptName + " '" + inputSizes_str + "' '" + runtimes_str + "'";
+
+        if (!Tools::existFile(scriptName)) {
+            std::cerr << "Error: Python script '" << scriptName << "' not found in current directory" << std::endl;
+		}
+
+        FILE* pipe = popen(command.c_str(), "r");
+        if (!pipe) {
+            std::cerr << "Failed to run Python script" << std::endl;
+            return;
+        }
+
+        std::string result;
+        char buffer[128];
+        while (fgets(buffer, sizeof(buffer), pipe) != nullptr) {
+            result += buffer;
+        }
+        pclose(pipe);
+
+        size_t pos = result.find("Best model: ");
+        if (pos != std::string::npos) {
+            pos += strlen("Best model: ");
+            size_t end = result.find('\n', pos);
+            bestComplexity = result.substr(pos, end - pos);
+        }
+
+        pos = result.find("MSE: ");
+        if (pos != std::string::npos) {
+            pos += strlen("MSE: ");
+            size_t end = result.find('\n', pos);
+            std::string mse_str = result.substr(pos, end - pos);
+            try {
+                mse = std::stod(mse_str);
+            } catch (...) {
+                mse = 0.0;
+            }
+        }
+    }
+
+
+
+
+
 
 	void Evaluation::addTestCase(Case &caso) {
 		if ( caso.getVariation().size() && caso.getVariation() != variation ) {
@@ -2452,6 +2513,12 @@
 		grade = grademax;
 		float defaultGradeReduction = (grademax - grademin) / testCases.size();
 		int timeout = maxtime / testCases.size();
+
+		vector<double> runtimes;
+		vector<long> inputSizes;
+	    initializeVectors(runtimes, inputSizes, testCases.size());
+		
+
 		for (size_t i = 0; i < testCases.size(); i++) {
 			isCompetition = false;
 			printf("Testing %lu/%lu : %s\n", (unsigned long)i + 1, (unsigned long)testCases.size(), testCases[i].getCaseDescription().c_str());
@@ -2472,6 +2539,9 @@
 			else{
 				testCases[i].runTest(timeout, chrono::milliseconds(0));
 			}
+			
+			testCases[i].fillVectorsForTest(runtimes, inputSizes, i);
+			
 			if(isCompetition){
 				if (!Tools::existFile("config.json")) {
 					sprintf(executionErrorReason, "Error: config.json file not found.");
@@ -2488,6 +2558,7 @@
 				}
 			}
 			nruns++;
+
 
 			float gr = testCases[i].getGradeReduction();
 			if (gr == numeric_limits<float>::min()){
@@ -2523,7 +2594,9 @@
 					testResults.emplace_back(testCases[i].getCaseDescription(), testCases[i].getCpuTimeRatio());
 				}
 			}
-		}
+	    }
+
+		analyzePerformance(runtimes, inputSizes);
 
 		if(testResults.size() > 0){
 			//printCpuRatios(testResults);
@@ -2552,6 +2625,25 @@
 		}
 		
 	}
+
+	void Evaluation::initializeVectors(vector<double>& runtimes, vector<long>& inputSizes, size_t numCases) {
+        runtimes = vector<double>(numCases, 0.0);
+        inputSizes = vector<long>(numCases, 0);
+    }
+
+	void TestCase::fillVectorsForTest(vector<double>& runtimes, vector<long>& inputSizes, size_t index) {
+        runtimes[index] = this->getElapsedTime().count();
+        long size = 1;  // ברירת מחדל
+        string sizeStr = this->getInputSize();
+        if (!sizeStr.empty()) {
+            try {
+                size = stol(sizeStr);
+            } catch (...) {
+                size = 1;
+            }
+        }
+        inputSizes[index] = size;
+    }
 
 
 	#include <iomanip>
@@ -2626,6 +2718,14 @@
 						<< setw(20) << memoryKB
 						<< endl;
 			}
+			    
+            if (!bestComplexity.empty()) {
+                printf("\n<|--\n");
+                printf("-Performance Analysis\n");
+                printf("Identified time complexity: %s\n", bestComplexity.c_str());
+                printf("MSE: %.6f\n", mse);
+                printf("--|>\n");
+            }
 
 		}
 		if (!noGrade) {
