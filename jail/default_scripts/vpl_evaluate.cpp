@@ -2129,6 +2129,7 @@ uint64_t stopPerfCounting(int fd) {
 
 		correctExitCode = isExitCodeTested() && expectedExitCode == exitCode;
 		correctOutput = match(studentProcess.output) || match(programOutputBefore + studentProcess.output);
+		this->cpuInstructions = stopPerfCounting(perfFd);
 
 		compareAndPrintResults(studentProcess, teacherProcess);
 
@@ -2665,8 +2666,8 @@ uint64_t stopPerfCounting(int fd) {
           << setw(15) << "Input Size"
           << setw(20) << "Run Time (ms)"
 		  << setw(20) << "CPU Time (ms)"
+		  << setw(15) << "CPU Inst" //michal
           << setw(20) << "Memory (KB)"
-		  << setw(20) << "cpuInstructions" //michal
           << endl;
 
 			cout << string(100, '-') << endl;
