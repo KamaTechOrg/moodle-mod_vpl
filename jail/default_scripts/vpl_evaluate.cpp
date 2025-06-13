@@ -5,39 +5,54 @@
 	 * @Author Juan Carlos Rodríguez-del-Pino <jcrodriguez@dis.ulpgc.es>
 	 */
 
+// ===== Kernel headers (perf_event) =====
+#include <linux/perf_event.h>
+#include <asm/unistd.h>
+#include <sys/ioctl.h>
+#include <sys/syscall.h>
 
-	
-	#include <cstdlib>
-	#include <cstdio>
-	#include <climits>
-	#include <limits>
-	#include <errno.h>
-	#include <sys/types.h>
-	#include <sys/wait.h>
-	#include <poll.h>
-	#include <unistd.h>
-	#include <pty.h>
-	#include <fcntl.h>
-	#include <signal.h>
-	#include <cstring>
-	#include <string>
-	#include <iostream>
-	#include <sstream>
-	#include <vector>
-	#include <cmath>
-	#include <execinfo.h>
-	#include <regex.h>
-	#include <string>
+// ===== C standard library headers =====
+#include <cstdlib>
+#include <cstdio>
+#include <cerrno>
+#include <climits>
+#include <cstring>
+#include <cmath>
+#include <cstdint>
 
-	//Added by Tamar
-	#include <chrono>
-	#include <regex>
-	#include <random>
-	#include <fstream>
-	#include <sys/resource.h>
-	#include <iomanip>
-	#include "json.hpp"
+// ===== POSIX / Unix system headers =====
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <poll.h>
+//#include <pty.h>      // Requires libutil-dev
+#if defined(__APPLE__)
+    #include <util.h>
+#else
+    #include <pty.h>
+#endif
+//#include <util.h>     // May require libbsd-dev
+#include <fcntl.h>
+#include <signal.h>
+#include <sys/resource.h>
+#include <execinfo.h>
+#include <regex.h>
 
+
+// ===== C++ standard library headers =====
+#include <iostream>
+#include <sstream>
+#include <fstream>
+#include <string>
+#include <vector>
+#include <chrono>
+#include <random>
+#include <regex>
+#include <iomanip>
+#include <limits>
+
+// ===== Project-specific headers =====
+#include "json.hpp"
 
 	using namespace std;
 
@@ -261,7 +276,7 @@
 		//Added by Tamar
 		void addInputSize(string );
 		string getInputSize();
-
+		uint64_t getcpuInstructions(); //michal
 	};
 
 
@@ -314,6 +329,7 @@
 		int expectedExitCode; // Default value numeric_limits<int>::min()
 		int exitCode; // Default value numeric_limits<int>::min()
 		string programOutputBefore, programOutputAfter, programInput;
+		uint64_t cpuInstructions;
 
 		//Added by Tamar
 		string inputSize;
@@ -352,6 +368,7 @@
 
 		//Added by Tamar
 		string getInputSize();
+		uint64_t getcpuInstructions();
 
 		string getCommentTitle(bool withGradeReduction/*=false*/); // Suui
 		string getComment();
@@ -1246,6 +1263,7 @@
         userTime = {0, 0};
         systemTime = {0, 0};
 		cpuTimeRatio =0;
+		cpuInstructions=0;
 
 		for(size_t i = 0; i < o.output.size(); i++){
 			output.push_back(o.output[i]->clone());
@@ -1357,6 +1375,11 @@
 	string TestCase::getInputSize(){
 		return inputSize;
 	}
+
+	//added by michal
+	uint64_t TestCase::getcpuInstructions(){
+		return cpuInstructions;
+	 }
 
 	string TestCase::getCommentTitle(bool withGradeReduction=false) {
 		char buf[100];
@@ -1905,14 +1928,53 @@
 
 	}
 
+  // michal
+  int perf_event_open(struct perf_event_attr *hw_event, pid_t pid, int cpu,
+	int group_fd, unsigned long flags) {
+	  return syscall(__NR_perf_event_open, hw_event, pid, cpu, group_fd, flags);
+}
 
+int startPerfCounting(pid_t pid) {
+	struct perf_event_attr pe{};
+	memset(&pe, 0, sizeof(struct perf_event_attr));
+	pe.type = PERF_TYPE_HARDWARE;
+	pe.size = sizeof(struct perf_event_attr);
+	pe.config = PERF_COUNT_HW_INSTRUCTIONS;
+	pe.disabled = 1;
+	pe.exclude_kernel = 1;
+	pe.exclude_hv = 1;
+	int fd = perf_event_open(&pe, pid, -1, -1, 0);
+	if (fd == -1) {
+		std::cerr << "Error opening perf event: " << strerror(errno) << "\n";
+		return -1;
+	}
+	if (ioctl(fd, PERF_EVENT_IOC_RESET, 0) == -1) {
+		std::cerr << "Failed to reset perf counter: " << strerror(errno) << "\n";
+	}
+	if (ioctl(fd, PERF_EVENT_IOC_ENABLE, 0) == -1) {
+		std::cerr << "Failed to enable perf counter: " << strerror(errno) << "\n";
+	}
+	return fd;
+}
+
+uint64_t stopPerfCounting(int fd) {
+	ioctl(fd, PERF_EVENT_IOC_DISABLE, 0);
+	uint64_t count = 0;
+	ssize_t res = read(fd, &count, sizeof(count));
+	if (res != sizeof(count)) {
+		std::cerr << "Error reading perf counter\n";
+		count = 0;
+	}
+	close(fd);
+	return count;
+}
 
 
 
 	// Main runTest function
 	void TestCase::runTestWithCompare(time_t timeout, chrono::milliseconds timeoutInMs) {
 		time_t start = time(NULL);
-
+		int perfFd = startPerfCounting(getpid());
 		input = processArrayInput(input);
 		elapsedTime = chrono::milliseconds(0);
 		maxResidentSetSize = 0;
@@ -2327,7 +2389,6 @@
 			: testId(id), cpuTimeRatio(ratio) {}
 	};
 
-
 	// Function to load configuration from a JSON file
 	Config loadConfig(const string& filename) {
 		Config config;
@@ -2605,6 +2666,7 @@
           << setw(20) << "Run Time (ms)"
 		  << setw(20) << "CPU Time (ms)"
           << setw(20) << "Memory (KB)"
+		  << setw(20) << "cpuInstructions" //michal
           << endl;
 
 			cout << string(100, '-') << endl;
@@ -2617,12 +2679,14 @@
 				double userTime_ms = testCases[i].userTime.tv_sec * 1000.0 + testCases[i].userTime.tv_usec / 1000.0;
 				double systemTime_ms = testCases[i].systemTime.tv_sec * 1000.0 + testCases[i].systemTime.tv_usec / 1000.0;
 				double totalCpuTime_ms = userTime_ms + systemTime_ms;
+				uint64_t inst = testCases[i].getcpuInstructions(); // <-- added michal
 
 
 				cout << left << setw(25) << testName
 						<< setw(15) << inputSize
 						<< setw(20) << fixed << setprecision(2) << elapsed_ms.count()
 						<< setw(20) << totalCpuTime_ms
+						<< setw(15) << inst              // <-- added michal
 						<< setw(20) << memoryKB
 						<< endl;
 			}
