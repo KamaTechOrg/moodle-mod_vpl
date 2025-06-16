@@ -37,6 +37,8 @@ defined('MOODLE_INTERNAL') || die();
 require_once(dirname(__FILE__).'/vpl.class.php');
 require_once(dirname(__FILE__).'/views/sh_factory.class.php');
 require_once(dirname(__FILE__).'/views/show_hide_div.class.php');
+//added by tamar
+require_once(dirname(__FILE__).'/locallib.php');
 
 // Non static due to usort error.
 function vpl_compare_filenamebylengh($f1, $f2) {
@@ -395,6 +397,9 @@ class mod_vpl_submission {
         return $grade;
     }
 
+
+    
+
     /**
      * Set/update grade
      *
@@ -406,6 +411,13 @@ class mod_vpl_submission {
         global $USER;
         global $CFG;
         global $DB;
+
+        $instance = $this->vpl->get_instance();
+        $vplrow = $DB->get_record('vpl', ['id' => $instance->id], 'questionid', IGNORE_MISSING);
+        if ($vplrow && !is_null($vplrow->questionid)) {
+            $questionid = $vplrow->questionid;
+            $quizid = 284;
+        }
         ignore_user_abort( true );
         $scaleid = $this->vpl->get_grade();
         if ($scaleid == 0 && empty( $CFG->enableoutcomes )) { // No scale no outcomes.
@@ -433,6 +445,27 @@ class mod_vpl_submission {
                 $info->grade = ( int ) $info->grade;
             }
             $this->instance->grade = $info->grade;
+
+            //Added by Tamar
+            $maxmark  = 100;
+            $rawgrade = $this->reduce_grade($info->grade);
+            if ($quizid && $questionid) {
+                try {
+                    update_relative_question_grade(
+                        $quizid,
+                        $questionid,
+                        $USER->id,
+                        $rawgrade,
+                        $maxmark
+                    );
+                } catch (Throwable $e) {
+                    debugging('Quiz-sync failed: '.$e->getMessage(), DEBUG_DEVELOPER);
+                }
+            }
+    
+
+
+
             // Save assessment comments.
             $comments = $info->comments;
             $fn = $this->get_gradecommentsfilename();
@@ -508,6 +541,7 @@ class mod_vpl_submission {
         }
         return true;
     }
+
 
     /**
      * Removes in title grade reduction if exists

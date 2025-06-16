@@ -41,7 +41,7 @@ require_once($CFG->dirroot.'/course/lib.php');
  * @return int 0 if ok, error code otherwise
  */
 function vpl_grade_item_update($instance, $grades=null) {
-    global $CFG;
+    global $CFG, $DB, $USER;
     require_once($CFG->libdir.'/gradelib.php');
 
     $params = [];
@@ -66,7 +66,16 @@ function vpl_grade_item_update($instance, $grades=null) {
     if ($grades === 'reset') {
         $params['reset'] = true;
         $grades = null;
-    }
+    }    
+
+    // $quizid = 284;
+    // $userid = $USER->id;
+    // $maxmark = 1;
+    // $grade = 1.0;
+    // $vplrow = $DB->get_record('vpl', ['id' => $instance->id], 'questionid', IGNORE_MISSING);
+    // if ($vplrow && !is_null($vplrow->questionid)) {
+    //     update_relative_question_grade($quizid, $vplrow->questionid, $userid, $grade, $maxmark);
+    // }
 
     return grade_update(
         'mod/vpl',
@@ -79,6 +88,62 @@ function vpl_grade_item_update($instance, $grades=null) {
         $params
     );
 }
+
+// function update_relative_question_grade($quizid, $questionid, $userid, $grade, $maxmark){
+//     global $DB;
+//     $sql_qa = "SELECT qa.id AS questionattemptid
+//     FROM {question_attempts} qa
+//     JOIN {quiz_attempts} quiza ON quiza.uniqueid = qa.questionusageid
+//     WHERE quiza.quiz = :quizid AND quiza.userid = :userid AND qa.questionid = :questionid";
+//     $qa_record = $DB->get_record_sql($sql_qa, [
+//     'quizid'     => $quizid,
+//     'userid'     => $userid,
+//     'questionid' => $questionid
+//     ]);
+
+//     if (!$qa_record) {
+//         throw new moodle_exception('questionattemptnotfound', 'error', '', null, 'No matching question attempt found.');
+//     }
+//     $questionattemptid = $qa_record->questionattemptid;
+
+//     // // 2. Determine the next sequence number.
+//     $maxseq = $DB->get_field_sql(
+//         "SELECT COALESCE(MAX(sequencenumber),0) FROM {question_attempt_steps} WHERE questionattemptid = ?",
+//         [$questionattemptid]
+//     );
+//     $nextseq = $maxseq + 1;
+
+//     // // 3. Decide on the state based on the grade fraction.
+//     $state = ($grade === 1.0) ? 'gradedright'
+//     : (($grade === 0.0) ? 'gradedwrong' : 'mangrpartial');
+//     $timestamp = time();
+
+//     // // 4. Insert a new attempt step and get the new step ID.
+//     $step = new stdClass();
+//     $step->questionattemptid = $questionattemptid;
+//     $step->sequencenumber    = $nextseq;
+//     $step->state             = $state;
+//     $step->fraction          = $grade/$maxmark;
+//     $step->timecreated       = $timestamp;
+//     $step->userid            = $userid;
+//     $newstepid = $DB->insert_record('question_attempt_steps', $step, true);
+
+//     // 5. Insert related step data.
+//     $datapairs = [
+//     '-comment'       => 'Good work',
+//     '-mark'          => $grade,
+//     '-commentformat' => 1,
+//     '-maxmark'       => $maxmark
+//     ];
+
+//     foreach ($datapairs as $name => $value) {
+//         $data = new stdClass();
+//         $data->attemptstepid = $newstepid;
+//         $data->name          = $name;
+//         $data->value         = $value;
+//         $DB->insert_record('question_attempt_step_data', $data);
+//     }
+// }
 
 /**
  * Updates activity grades.
@@ -95,12 +160,19 @@ function vpl_update_grades($instance, $userid=0, $nullifnone=true) {
     require_once($CFG->libdir.'/gradelib.php');
     require_once(dirname( __FILE__ ) . '/vpl_submission_CE.class.php');
 
+
     if (! isset($instance->cmidnumber)) {
         if ($cm = get_coursemodule_from_id(VPL, $instance->coursemodule)) {
             $instance = clone $instance;
             $instance->cmidnumber = $cm->idnumber;
         }
     }
+    
+    // $vplrow = $DB->get_record('vpl', ['id' => $instance->id], 'questionid', IGNORE_MISSING);
+    // if ($vplrow && !is_null($vplrow->questionid)) {
+    //     $quizid = 284;
+    //     update_relative_question_grade($quizid, $vplrow->questionid, 3, 0.0, 1);
+    // }
 
     if ($instance->grade == 0) {
         return vpl_grade_item_update($instance);
@@ -135,7 +207,9 @@ function vpl_update_grades($instance, $userid=0, $nullifnone=true) {
             $grade->dategraded = $sub->dategraded;
             $grade->datesubmitted = $sub->datesubmitted;
             $grades[$grade->userid] = $grade;
+            
         }
+
     }
     return vpl_grade_item_update($instance, $grades);
 }

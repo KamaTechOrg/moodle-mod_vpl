@@ -347,6 +347,7 @@ function vpl_get_gradenoun_str() {
     return 'grade';
 }
 
+
 /**
  * @codeCoverageIgnore
  *
@@ -1203,4 +1204,61 @@ function vpl_call_with_transaction(string $function, array $parms) {
 function vpl_get_scripts_dir() {
     global $CFG;
     return $CFG->dirroot . '/mod/vpl/jail/default_scripts';
+}
+
+
+function update_relative_question_grade($quizid, $questionid, $userid, $grade, $maxmark){
+    global $DB;
+    $sql_qa = "SELECT qa.id AS questionattemptid
+    FROM {question_attempts} qa
+    JOIN {quiz_attempts} quiza ON quiza.uniqueid = qa.questionusageid
+    WHERE quiza.quiz = :quizid AND quiza.userid = :userid AND qa.questionid = :questionid";
+    $qa_record = $DB->get_record_sql($sql_qa, [
+    'quizid'     => $quizid,
+    'userid'     => $userid,
+    'questionid' => $questionid
+    ]);
+
+    if (!$qa_record) {
+        throw new moodle_exception('questionattemptnotfound', 'error', '', null, 'No matching question attempt found.');
+    }
+    $questionattemptid = $qa_record->questionattemptid;
+
+    // // 2. Determine the next sequence number.
+    $maxseq = $DB->get_field_sql(
+        "SELECT COALESCE(MAX(sequencenumber),0) FROM {question_attempt_steps} WHERE questionattemptid = ?",
+        [$questionattemptid]
+    );
+    $nextseq = $maxseq + 1;
+
+    // // 3. Decide on the state based on the grade fraction.
+    $state = ($grade === 1.0) ? 'gradedright'
+    : (($grade === 0.0) ? 'gradedwrong' : 'mangrpartial');
+    $timestamp = time();
+
+    // 4. Insert a new attempt step and get the new step ID.
+    $step = new stdClass();
+    $step->questionattemptid = $questionattemptid;
+    $step->sequencenumber    = $nextseq;
+    $step->state             = $state;
+    $step->fraction          = $grade/$maxmark;
+    $step->timecreated       = $timestamp;
+    $step->userid            = $userid;
+    $newstepid = $DB->insert_record('question_attempt_steps', $step, true);
+
+    // 5. Insert related step data.
+    $datapairs = [
+    '-comment'       => 'Good work',
+    '-mark'          => $grade,
+    '-commentformat' => 1,
+    '-maxmark'       => $maxmark
+    ];
+
+    foreach ($datapairs as $name => $value) {
+        $data = new stdClass();
+        $data->attemptstepid = $newstepid;
+        $data->name          = $name;
+        $data->value         = $value;
+        $DB->insert_record('question_attempt_step_data', $data);
+    }
 }
