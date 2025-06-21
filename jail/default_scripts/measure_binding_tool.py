@@ -1,88 +1,41 @@
 import re
 import ast
+import tempfile
+import shutil
+import os
+import sys
 
-def insert_measurements(input_file, output_file='main.py'):
+def insert_measurements(input_file):
     with open(input_file, 'r') as f:
         lines = f.readlines()
 
     output_lines = []
-    in_block = False
-    import_added = False
-
     for line in lines:
-        if re.match(r'\s*import\s+measure\s*', line):
-            import_added = True
-            break
-
-    inserted_import = False
-
-    for i, line in enumerate(lines):
-        if not inserted_import and not import_added:
-            if line.strip() and not line.strip().startswith('#'):
-                output_lines.append('import measure\n')
-                inserted_import = True
-
-        if re.match(r'\s*#\s*start\s*', line):
-            if not import_added and not inserted_import:
-                output_lines.append('import measure\n')
-                inserted_import = True
+        if re.search(r'#\s*import_measure', line):
+            output_lines.append('import measure\n')
+        elif re.search(r'#\s*start_measurement', line):
             output_lines.append('measure.start_measurement()\n')
-            in_block = True
-            continue
-
-        elif re.match(r'\s*#\s*end\s*', line):
+        elif re.search(r'#\s*end_measurement', line):
             output_lines.append('measure.end_measurement()\n')
-            in_block = False
-            continue
-
-        elif in_block:
-            output_lines.append(f'# original code: {line.rstrip()}\n')
         else:
             output_lines.append(line)
 
-    with open(output_file, 'w') as f:
-        f.writelines(output_lines)
+    with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.py') as temp_f:
+        temp_f.writelines(output_lines)
+        temp_file_name = temp_f.name
 
-    print(f"Modified script written to {output_file}")
-
-def generate_python_main(student_code):
     try:
-        tree = ast.parse(student_code)
-        main_func = None
-        for node in ast.walk(tree):
-            if isinstance(node, ast.FunctionDef) and node.name == 'main':
-                main_func = node.name
-                break
-            elif isinstance(node, ast.FunctionDef):
-                main_func = node.name
-
-        if main_func:
-            return f"""
-import measure
-{student_code}
-if __name__ == '__main__':
-    measure.start_measurement()
-    result = {main_func}()
-    measure.end_measurement()
-    print(result)
-"""
-        else:
-            return f"""
-import measure
-{student_code}
-measure.start_measurement()
-{student_code}
-measure.end_measurement()
-"""
-    except SyntaxError:
-        return f"""
-import measure
-{student_code}
-measure.start_measurement()
-{student_code}
-measure.end_measurement()
-"""
+        with open(temp_file_name, 'r') as temp_f:
+            ast.parse(temp_f.read())
+        shutil.move(temp_file_name, input_file)
+        print(f":white_check_mark: Modified script written to {input_file}")
+    except SyntaxError as e:
+        os.unlink(temp_file_name)
+        print(f":x: Syntax error in generated code: {e}. Original file unchanged.")
+    except Exception as e:
+        os.unlink(temp_file_name)
+        print(f":x: Error processing file: {e}. Original file unchanged.")
 
 if __name__ == '__main__':
-    input_file = 'student.py'
-    insert_measurements(input_file, 'main.py')
+    input_file = 'main.py'
+    insert_measurements(input_file)
