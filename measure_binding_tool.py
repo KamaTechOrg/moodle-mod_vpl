@@ -14,19 +14,19 @@ def insert_measurements(input_file):
 
     for i, line in enumerate(lines):
         if re.search(r'#\s*start_measurement', line):
+            output_lines.append(f'# {line.rstrip()}\n')  # שמירת השורה המקורית כהערה
             output_lines.append('measure.start_measurement()\n')
             in_block = True
             continue
 
         elif re.search(r'#\s*end_measurement', line):
             output_lines.append('measure.end_measurement()\n')
+            output_lines.append(f'# {line.rstrip()}\n')  # שמירת השורה המקורית כהערה
             in_block = False
             continue
 
-        elif in_block:
-            output_lines.append(f'# original code: {line.rstrip()}\n')
         else:
-            output_lines.append(line)
+            output_lines.append(line)  # שמירת השורה כפי שהיא, גם בתוך הבלוק
 
     # יצירת קובץ זמני
     with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.py') as temp_f:
@@ -54,5 +54,5 @@ def insert_measurements(input_file):
 
 
 if __name__ == '__main__':
-    input_file = 'replace_placeholder.py'
+    input_file = 'main.py'  # עיבוד קובץ main.py שנוצר על ידי generate_python_main_py
     insert_measurements(input_file)
