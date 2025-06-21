@@ -43,7 +43,6 @@
 #include <iostream>
 #include <sstream>
 #include <fstream>
-#include <string>
 #include <vector>
 #include <chrono>
 #include <random>
@@ -276,7 +275,6 @@
 		//Added by Tamar
 		void addInputSize(string );
 		string getInputSize();
-		uint64_t getcpuInstructions(); //michal
 	};
 
 
@@ -1803,6 +1801,46 @@
 		cout << "Memory Usage Ratio: " << memoryRatio << "\n\n";
 	}
 
+  int perf_event_open(struct perf_event_attr *hw_event, pid_t pid, int cpu,
+	int group_fd, unsigned long flags) {
+	  return syscall(__NR_perf_event_open, hw_event, pid, cpu, group_fd, flags);
+}
+
+int startPerfCounting(pid_t pid) {
+	struct perf_event_attr pe{};
+	memset(&pe, 0, sizeof(struct perf_event_attr));
+	pe.type = PERF_TYPE_HARDWARE;
+	pe.size = sizeof(struct perf_event_attr);
+	pe.config = PERF_COUNT_HW_INSTRUCTIONS;
+	pe.disabled = 1;
+	pe.exclude_kernel = 1;
+	pe.exclude_hv = 1;
+	int fd = perf_event_open(&pe, pid, -1, -1, 0);
+	if (fd == -1) {
+		std::cerr << "Error opening perf event: " << strerror(errno) << "\n";
+		return -1;
+	}
+	if (ioctl(fd, PERF_EVENT_IOC_RESET, 0) == -1) {
+		std::cerr << "Failed to reset perf counter: " << strerror(errno) << "\n";
+	}
+	if (ioctl(fd, PERF_EVENT_IOC_ENABLE, 0) == -1) {
+		std::cerr << "Failed to enable perf counter: " << strerror(errno) << "\n";
+	}
+	return fd;
+}
+
+uint64_t stopPerfCounting(int fd) {
+	ioctl(fd, PERF_EVENT_IOC_DISABLE, 0);
+	uint64_t count = 0;
+	ssize_t res = read(fd, &count, sizeof(count));
+	if (res != sizeof(count)) {
+		std::cerr << "Error reading perf counter\n";
+		count = 0;
+	}
+	close(fd);
+	return count;
+}
+
 
 
 	void TestCase::runTest(time_t timeout, chrono::milliseconds timeoutInMs) { //Changed by Tamar
@@ -1847,6 +1885,7 @@
 			sprintf(executionErrorReason, "Internal error: fork error (%s)", strerror(errno));
 			return;
 		}
+		int perfFd = startPerfCounting(pid);
 		close(pp1[0]);
 		close(pp2[1]);
 		int fdwrite = pp1[1];
@@ -1891,7 +1930,7 @@
 				}
 			}
 		}
-		
+		this->cpuInstructions = stopPerfCounting(perfFd);
 		//Added by Tamar
 		auto endInMs = chrono::high_resolution_clock::now();
 		elapsedTime = chrono::duration_cast<chrono::milliseconds>(endInMs - startInMs);
@@ -1928,53 +1967,10 @@
 
 	}
 
-  // michal
-  int perf_event_open(struct perf_event_attr *hw_event, pid_t pid, int cpu,
-	int group_fd, unsigned long flags) {
-	  return syscall(__NR_perf_event_open, hw_event, pid, cpu, group_fd, flags);
-}
-
-int startPerfCounting(pid_t pid) {
-	struct perf_event_attr pe{};
-	memset(&pe, 0, sizeof(struct perf_event_attr));
-	pe.type = PERF_TYPE_HARDWARE;
-	pe.size = sizeof(struct perf_event_attr);
-	pe.config = PERF_COUNT_HW_INSTRUCTIONS;
-	pe.disabled = 1;
-	pe.exclude_kernel = 1;
-	pe.exclude_hv = 1;
-	int fd = perf_event_open(&pe, pid, -1, -1, 0);
-	if (fd == -1) {
-		std::cerr << "Error opening perf event: " << strerror(errno) << "\n";
-		return -1;
-	}
-	if (ioctl(fd, PERF_EVENT_IOC_RESET, 0) == -1) {
-		std::cerr << "Failed to reset perf counter: " << strerror(errno) << "\n";
-	}
-	if (ioctl(fd, PERF_EVENT_IOC_ENABLE, 0) == -1) {
-		std::cerr << "Failed to enable perf counter: " << strerror(errno) << "\n";
-	}
-	return fd;
-}
-
-uint64_t stopPerfCounting(int fd) {
-	ioctl(fd, PERF_EVENT_IOC_DISABLE, 0);
-	uint64_t count = 0;
-	ssize_t res = read(fd, &count, sizeof(count));
-	if (res != sizeof(count)) {
-		std::cerr << "Error reading perf counter\n";
-		count = 0;
-	}
-	close(fd);
-	return count;
-}
-
-
 
 	// Main runTest function
 	void TestCase::runTestWithCompare(time_t timeout, chrono::milliseconds timeoutInMs) {
 		time_t start = time(NULL);
-		int perfFd = startPerfCounting(getpid());
 		input = processArrayInput(input);
 		elapsedTime = chrono::milliseconds(0);
 		maxResidentSetSize = 0;
@@ -2018,6 +2014,7 @@ uint64_t stopPerfCounting(int fd) {
 		if (!startProcess(studentProcess, argv, envv)) {
 			return;
 		}
+
 		if (!startProcess(teacherProcess, argv, envv)) {
 			return;
 		}
@@ -2129,7 +2126,6 @@ uint64_t stopPerfCounting(int fd) {
 
 		correctExitCode = isExitCodeTested() && expectedExitCode == exitCode;
 		correctOutput = match(studentProcess.output) || match(programOutputBefore + studentProcess.output);
-		this->cpuInstructions = stopPerfCounting(perfFd);
 
 		compareAndPrintResults(studentProcess, teacherProcess);
 
