@@ -53,49 +53,6 @@ def insert_measurements(input_file):
         print(f"Error processing file: {e}. Original file unchanged.")
 
 
-def generate_python_main(student_code):
-    try:
-        tree = ast.parse(student_code)
-        main_func = None
-        for node in ast.walk(tree):
-            if isinstance(node, ast.FunctionDef) and node.name == 'main':
-                main_func = node.name
-                break
-            elif isinstance(node, ast.FunctionDef):
-                main_func = node.name
-
-        if main_func:
-            return f"""
-import measure
-{student_code}
-if __name__ == '__main__':
-    measure.start_measurement()
-    result = {main_func}()
-    measure.end_measurement()
-    print(result)
-"""
-        else:
-            return f"""
-import measure
-{student_code}
-if __name__ == '__main__':
-    measure.start_measurement()
-    result = None
-    measure.end_measurement()
-    print(result)
-"""
-    except SyntaxError:
-        return f"""
-import measure
-{student_code}
-if __name__ == '__main__':
-    measure.start_measurement()
-    result = None
-    measure.end_measurement()
-    print(result)
-"""
-
-
 if __name__ == '__main__':
     input_file = 'replace_placeholder.py'
     insert_measurements(input_file)
