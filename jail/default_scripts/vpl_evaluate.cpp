@@ -1227,11 +1227,10 @@ chrono::duration<double, std::milli> TestCase::getSolutionElapsedTime() const {
 
 	void TestCase::setDefaultCommand() {
 
-    command = "/usr/bin/python3";
-    argv = new const char*[3];
-		argv[0] = command;
-    argv[1] = "main.py";
-    argv[2] = NULL;
+   	command = "./vpl_test";
+	argv = new const char*[2];
+	argv[0] = command;
+    argv[1] = NULL;
 	}
 
 	TestCase::TestCase(const TestCase &o) {
@@ -1422,8 +1421,8 @@ chrono::duration<double, std::milli> TestCase::getSolutionElapsedTime() const {
 		}
 
 		//Added by Tamar
-    if (measuredTime > 0) {
-			sprintf(buf, "Measured time: %lld microseconds\n", measuredTime);
+   		 if(elapsedTime.count()>0){
+			sprintf(buf, "Program run time in ms: %f \n", elapsedTime.count());
 			ret += buf;
 		}
 
@@ -1636,9 +1635,7 @@ chrono::duration<double, std::milli> TestCase::getSolutionElapsedTime() const {
 				result = inputToFile(result);
 
 				if (programToRun.empty()){
-                command = "/usr/bin/python3";
-                argv[0] = command;
-                argv[1] = "main.py";
+                  command = "./inputFile.sh";               
 				}
 			}
 		}
@@ -1704,8 +1701,6 @@ bool TestCase::setupPipes(ProcessInfo& process) {
         dup2(process.timePipe[1], 3); // Time measurement on FD=3
         close(process.timePipe[1]);
 			setpgrp();
-
-            setenv("PYTHONPATH", ".", 1);
 			execve(process.command, (char *const *)argv, (char *const *)envv);
 			perror("Internal error, execve fails");
 			abort(); // End of child process
@@ -1825,32 +1820,17 @@ void TestCase::compareAndPrintResults(const ProcessInfo& studentProcess, const P
 		}
 		if (programToRun > "" && programToRun.size() < 512) {
 			command = programToRun.c_str();
-        argv[0] = command;
-        argv[1] = "main.py";
-    } else {
-        command = "/usr/bin/python3";
-        argv[0] = command;
-        argv[1] = "main.py";
-        argv[2] = NULL;
-    }
-    if (!Tools::existFile("main.py")) {
-        executionError = true;
-        sprintf(executionErrorReason, "Execution file not found 'main.py'");
-        return;
-    }
+        }
+		if (!Tools::existFile(command)) {
+			executionError = true;
+			sprintf(executionErrorReason, "Execution file not found '%s'", command);
+			return;
+		}
 		pid_t pid;
 		if (programArgs.size() > 0) {
 			splitArgs(programArgs);
 		}
-      //  if (pipe(timePipe) == -1) {
-      //      cerr << "DEBUG: Failed to create time pipe" << endl;
-      //      return;
-       // }
         int flags = fcntl(timePipe[0], F_GETFL);
-      //  if (flags == -1) {
-       //     cerr << "DEBUG: Failed to get time pipe flags" << endl;
-       //     return;
-      //  }
        if (flags == -1 || fcntl(timePipe[0], F_SETFL, flags & ~O_NONBLOCK) == -1) {
         executionError = true;
         sprintf(executionErrorReason, "Internal error: failed to set time pipe to blocking (%s)", strerror(errno));
@@ -1924,34 +1904,20 @@ void TestCase::compareAndPrintResults(const ProcessInfo& studentProcess, const P
             } else if (bytesRead == -1 && errno == EAGAIN) {
                 
         cerr << "DEBUG: Captured output (before): '" << programOutputBefore << "'\n";
-             //   usleep(100000); // Wait 100ms
-               // retries--;
-         //   } else {
-          //      cerr << "DEBUG: Failed to read from time pipe (bytesRead=" << bytesRead << ", errno=" << errno << ")" << endl;
-            //    break;
-            //}
-       // }
-      //  if (retries == 0) {
-            cerr << "DEBUG: No data read from time pipe after retries" << endl;
-      //  }
+	    cerr << "DEBUG: No data read from time pipe after retries" << endl;
             readFromPipe(timefd, timeData);
 			usleep(5000);
 
 			// TERMSIG or timeout or program output too large?
 			if (Stop::isTERMRequested() || (time(NULL) - start) >= timeout || outputTooLarge) { //Changed by Tamar
 				
-				//Added by Tamar
-				//if ((now - startInMs) >= timeoutInMs && timeoutInMs != chrono::milliseconds(0)) {
-				//    programTimeoutInMs = true;
-				//}
-
 				if ((time(NULL) - start) >= timeout) {
 					programTimeout = true;
 				}
 				kill(pid, SIGTERM); // Send SIGTERM normal termination
 				int otherstatus;
 				usleep(5000);
-                if (waitpid(pid, &status, WNOHANG | WUNTRACED) == pid) {
+                if (waitpid(pid, &otherstatus, WNOHANG | WUNTRACED) == pid) {
 					break;
 				}
 				if (kill(pid, SIGQUIT) == 0) { // Kill
@@ -1961,15 +1927,8 @@ void TestCase::compareAndPrintResults(const ProcessInfo& studentProcess, const P
 		}
     readFromPipe(timefd, timeData);
     if (!timeData.empty()) {
-        try {
             measuredTime = stoll(timeData);
             setStudentRunTime(measuredTime / 1000.0);
-            cerr << "DEBUG: Final read from time pipe: " << timeData << ", measuredTime=" << measuredTime << endl;
-        } catch (...) {
-            cerr << "DEBUG: Failed to parse time data: " << timeData << endl;
-        }
-    } else {
-        cerr << "DEBUG: No time data read from time pipe" << endl;
     }
     close(timefd);
 		auto endInMs = chrono::high_resolution_clock::now();
@@ -2002,13 +1961,6 @@ void TestCase::compareAndPrintResults(const ProcessInfo& studentProcess, const P
             strcpy(executionErrorReason, "<waitpid error>");
 		}
 		readWrite(fdread, fdwrite);
-   // char buf[32];
-    //ssize_t bytesRead = read(timefd, buf, sizeof(buf)-1);
-    //if (bytesRead > 0) {
-      //  buf[bytesRead] = '\0';
-        //measuredTime = atoll(buf);
-    //}
-    //close(timefd);
 		correctExitCode = isExitCodeTested() && expectedExitCode == exitCode;
     correctOutput = match(programOutputBefore + programOutputAfter) || match(programOutputAfter);
 
@@ -2020,187 +1972,134 @@ void TestCase::compareAndPrintResults(const ProcessInfo& studentProcess, const P
 
 	// Main runTest function
 	void TestCase::runTestWithCompare(time_t timeout, chrono::milliseconds timeoutInMs) {
-		time_t start = time(NULL);
+	time_t start = time(NULL);
 
-		input = processArrayInput(input);
-		elapsedTime = chrono::milliseconds(0);
-		maxResidentSetSize = 0;
-		userTime = {0, 0};
-		systemTime = {0, 0};
-    measuredTime = 0;
-		teacherCommand = "./vpl_test_teacher";
+	input = processArrayInput(input);
+	elapsedTime = chrono::milliseconds(0);
+	maxResidentSetSize = 0;
+	userTime = {0, 0};
+	systemTime = {0, 0};
+	measuredTime = 0;
 
-		if (!programToRun.empty() && programToRun.size() < 512) {
-			command = programToRun.c_str();
-        argv[0] = command;
-        argv[1] = "main.py";
-    } else {
-        command = "/usr/bin/python3";
-        argv[0] = command;
-        argv[1] = "main.py";
-        argv[2] = NULL;
-    }
-    if (!Tools::existFile("main.py")) {
-        executionError = true;
-        sprintf(executionErrorReason, "Execution file not found 'main.py'");
-        return;
-    }
-
-		if (!Tools::existFile(teacherCommand)) {
-			executionError = true;
-			sprintf(executionErrorReason, "Execution file not found '%s'", teacherCommand);
-			return;
-		}
-
-		if (programArgs.size() > 0) {
-			splitArgs(programArgs);
-		}
-
-		// Initialize ProcessInfo structs for student and teacher
-		ProcessInfo studentProcess, teacherProcess;
-		studentProcess.command = command;
-		teacherProcess.command = teacherCommand;
-
-		// Set up pipes
-		if (!setupPipes(studentProcess) || !setupPipes(teacherProcess)) {
-			return;
-		}
-	    int flags = fcntl(studentProcess.timePipe[0], F_GETFL);
-	    if (flags == -1 || fcntl(studentProcess.timePipe[0], F_SETFL, flags & ~O_NONBLOCK) == -1) {
-	        executionError = true;
-	        sprintf(executionErrorReason, "Internal error: failed to set time pipe to blocking (%s)", strerror(errno));
-	        return;
-	    }
-		// Start processes
-		if (!startProcess(studentProcess, argv, envv)) {
-			return;
-		}
-		if (!startProcess(teacherProcess, argv, envv)) {
-			return;
-		}
-
-		// Close unused pipe ends
-		closeUnusedPipeEnds(studentProcess);
-		closeUnusedPipeEnds(teacherProcess);
-
-		// Set non-blocking mode for output pipes
-		Tools::fdblock(studentProcess.outPipe[0], false);
-		Tools::fdblock(teacherProcess.outPipe[0], false);
- 	    //Tools::fdblock(studentProcess.timePipe[0], false);
-		// Write input to both processes
-		programInput = input;
-		if (!programInput.empty()) {
-			if (programInput.back() != '\n') {
-				programInput += '\n';
-			}
-			writeInputToProcess(studentProcess, programInput);
-			writeInputToProcess(teacherProcess, programInput);
-		}
-
-		// Start times for each process
-		auto startTime = chrono::high_resolution_clock::now();
-		studentProcess.startTime = startTime;
-		teacherProcess.startTime = startTime;
-	    string timeData;
-		// Main loop to monitor both processes
-		while (!studentProcess.finished || !teacherProcess.finished) {
-			// Use select() to monitor both output pipes
-			fd_set readfds;
-			FD_ZERO(&readfds);
-			int maxfd = 0;
-
-			if (!studentProcess.finished) {
-				FD_SET(studentProcess.outPipe[0], &readfds);
-            FD_SET(studentProcess.timePipe[0], &readfds);
-            maxfd = max(studentProcess.outPipe[0], studentProcess.timePipe[0]);
-			}
-			if (!teacherProcess.finished) {
-				FD_SET(teacherProcess.outPipe[0], &readfds);
-				if (teacherProcess.outPipe[0] > maxfd) maxfd = teacherProcess.outPipe[0];
-			}
-
-			struct timeval tv;
-			tv.tv_sec = 0;
-			tv.tv_usec = 5000; // 5ms timeout
-
-			int ret = select(maxfd + 1, &readfds, NULL, NULL, &tv);
-			if (ret > 0) {
-				// Read from student output
-				if (!studentProcess.finished && FD_ISSET(studentProcess.outPipe[0], &readfds)) {
-					readFromPipe(studentProcess.outPipe[0], studentProcess.output);
-				}
-            if (!studentProcess.finished && FD_ISSET(studentProcess.outPipe[0], &readfds)) {
-                readFromPipe(studentProcess.outPipe[0], studentProcess.output);
-            }
-            if (!studentProcess.finished && FD_ISSET(studentProcess.timePipe[0], &readfds)) {
-                readFromPipe(studentProcess.timePipe[0], timeData);
-            }
-            if (!teacherProcess.finished && FD_ISSET(teacherProcess.outPipe[0], &readfds)) {
-                readFromPipe(teacherProcess.outPipe[0], teacherProcess.output);
-            }
-        }
-        if (!studentProcess.finished) {
-            checkProcessTermination(studentProcess);
-            if (studentProcess.finished) {
-                exitCode = studentProcess.exitCode;
-                userTime = studentProcess.userTime;
-                systemTime = studentProcess.systemTime;
-                maxResidentSetSize = studentProcess.maxResidentSetSize;
-                elapsedTime = studentProcess.elapsedTime;
-            }
-        }
-        if (!teacherProcess.finished) {
-            checkProcessTermination(teacherProcess);
-        }
-        if (Stop::isTERMRequested() || (time(NULL) - start) >= timeout || outputTooLarge) {
-            if ((time(NULL) - start) >= timeout) {
-                programTimeout = true;
-            }
-            if (!studentProcess.finished) {
-                kill(studentProcess.pid, SIGTERM);
-                usleep(3000);
-                waitpid(studentProcess.pid, NULL, WNOHANG | WUNTRACED);
-                kill(studentProcess.pid, SIGQUIT);
-                studentProcess.finished = true;
-            }
-            if (!teacherProcess.finished) {
-                kill(teacherProcess.pid, SIGTERM);
-                usleep(3000);
-                waitpid(teacherProcess.pid, NULL, WNOHANG | WUNTRACED);
-                kill(teacherProcess.pid, SIGQUIT);
-                teacherProcess.finished = true;
-            }
-            break;
-        }
-    }
-    // Read any remaining data from the time pipe
-    if (!studentProcess.finished) {
-        readFromPipe(studentProcess.outPipe[0], studentProcess.output);
-        readFromPipe(studentProcess.timePipe[0], timeData);
-        close(studentProcess.outPipe[0]);
-        close(studentProcess.timePipe[0]);
-    }
-    if (!teacherProcess.finished) {
-        readFromPipe(teacherProcess.outPipe[0], teacherProcess.output);
-        close(teacherProcess.outPipe[0]);
-    }
-    if (!timeData.empty()) {
-        try {
-            measuredTime = stoll(timeData);
-            setStudentRunTime(measuredTime / 1000.0);
-            cerr << "DEBUG: Final read from time pipe: " << timeData << ", measuredTime=" << measuredTime << endl;
-        } catch (...) {
-            cerr << "DEBUG: Failed to parse time data: " << timeData << endl;
-        }
-    } else {
-        cerr << "DEBUG: No time data read from time pipe" << endl;
-    }
-    cerr << "DEBUG: Final student output: '" << studentProcess.output << "'\n";
-    cerr << "DEBUG: Final teacher output: '" << teacherProcess.output << "'\n";
-    correctExitCode = isExitCodeTested() && expectedExitCode == exitCode;
-    correctOutput = match(studentProcess.output) || match(programOutputBefore + studentProcess.output);
-    compareAndPrintResults(studentProcess, teacherProcess, measuredTime / 1000.0);
+	if (!programToRun.empty() && programToRun.size() < 512) {
+		command = programToRun.c_str();
 	}
+
+	if (!Tools::existFile(command)) {
+		executionError = true;
+		sprintf(executionErrorReason, "Execution file not found '%s'", command);
+		return;
+	}
+
+	if (programArgs.size() > 0) {
+		splitArgs(programArgs);
+	}
+
+	ProcessInfo studentProcess;
+	studentProcess.command = command;
+
+	if (!setupPipes(studentProcess)) {
+		return;
+	}
+
+	int flags = fcntl(studentProcess.timePipe[0], F_GETFL);
+	if (flags == -1 || fcntl(studentProcess.timePipe[0], F_SETFL, flags & ~O_NONBLOCK) == -1) {
+		executionError = true;
+		sprintf(executionErrorReason, "Internal error: failed to set time pipe to blocking (%s)", strerror(errno));
+		return;
+	}
+
+	if (!startProcess(studentProcess, argv, envv)) {
+		return;
+	}
+
+	closeUnusedPipeEnds(studentProcess);
+
+	Tools::fdblock(studentProcess.outPipe[0], false);
+
+	programInput = input;
+	if (!programInput.empty()) {
+		if (programInput.back() != '\n') {
+			programInput += '\n';
+		}
+		writeInputToProcess(studentProcess, programInput);
+	}
+
+	auto startTime = chrono::high_resolution_clock::now();
+	studentProcess.startTime = startTime;
+
+	string timeData;
+
+	while (!studentProcess.finished) {
+		fd_set readfds;
+		FD_ZERO(&readfds);
+		int maxfd = 0;
+
+		if (!studentProcess.finished) {
+			FD_SET(studentProcess.outPipe[0], &readfds);
+			FD_SET(studentProcess.timePipe[0], &readfds);
+			maxfd = max(studentProcess.outPipe[0], studentProcess.timePipe[0]);
+		}
+
+		struct timeval tv;
+		tv.tv_sec = 0;
+		tv.tv_usec = 5000;
+
+		int ret = select(maxfd + 1, &readfds, NULL, NULL, &tv);
+		if (ret > 0) {
+			if (!studentProcess.finished && FD_ISSET(studentProcess.outPipe[0], &readfds)) {
+				readFromPipe(studentProcess.outPipe[0], studentProcess.output);
+			}
+			if (!studentProcess.finished && FD_ISSET(studentProcess.timePipe[0], &readfds)) {
+				readFromPipe(studentProcess.timePipe[0], timeData);
+			}
+		}
+
+		if (!studentProcess.finished) {
+			checkProcessTermination(studentProcess);
+			if (studentProcess.finished) {
+				exitCode = studentProcess.exitCode;
+				userTime = studentProcess.userTime;
+				systemTime = studentProcess.systemTime;
+				maxResidentSetSize = studentProcess.maxResidentSetSize;
+				elapsedTime = studentProcess.elapsedTime;
+			}
+		}
+
+		if (Stop::isTERMRequested() || (time(NULL) - start) >= timeout || outputTooLarge) {
+			if ((time(NULL) - start) >= timeout) {
+				programTimeout = true;
+			}
+			if (!studentProcess.finished) {
+				kill(studentProcess.pid, SIGTERM);
+				usleep(3000);
+				waitpid(studentProcess.pid, NULL, WNOHANG | WUNTRACED);
+				kill(studentProcess.pid, SIGQUIT);
+				studentProcess.finished = true;
+			}
+			break;
+		}
+	}
+
+	if (!studentProcess.finished) {
+		readFromPipe(studentProcess.outPipe[0], studentProcess.output);
+		readFromPipe(studentProcess.timePipe[0], timeData);
+		close(studentProcess.outPipe[0]);
+		close(studentProcess.timePipe[0]);
+	}
+
+	if (!timeData.empty()) {
+		measuredTime = stoll(timeData);
+		setStudentRunTime(measuredTime / 1000.0);
+	} else {
+		cerr << "DEBUG: No time data read from time pipe" << endl;
+	}
+
+	correctExitCode = isExitCodeTested() && expectedExitCode == exitCode;
+	correctOutput = match(studentProcess.output) || match(programOutputBefore + studentProcess.output);
+	compareAndPrintResults(studentProcess, ProcessInfo(), measuredTime / 1000.0); // שלח ProcessInfo ריק עבור מורה
+}
+
 
 
 
@@ -2419,7 +2318,7 @@ void TestCase::compareAndPrintResults(const ProcessInfo& studentProcess, const P
 	bool Evaluation::loadParams() {
 		grademin= Tools::getenv("VPL_GRADEMIN", 0.0);
 		grademax = Tools::getenv("VPL_GRADEMAX", 10);
-		maxtime = (int) Tools::getenv("VPL_MAXTIME", 60);
+		maxtime = (int) Tools::getenv("VPL_MAXTIME", 20);
 		variation = Tools::toLower(Tools::trim(Tools::getenv("VPL_VARIATION","")));
 		noGrade = grademin >= grademax;
 		return true;
@@ -2750,7 +2649,6 @@ void Evaluation::outputEvaluation() {
             double systemTime_ms = testCases[i].systemTime.tv_sec * 1000.0 + testCases[i].systemTime.tv_usec / 1000.0;
             double totalCpuTime_ms = userTime_ms + systemTime_ms;
             double studentRunTime = testCases[i].getStudentRunTime();
-            cerr << "DEBUG: Test " << i+1 << " studentRunTime=" << studentRunTime << endl;
              cout << setw(20) << fixed << setprecision(6) << studentRunTime << endl;
         
 
