@@ -1,16 +1,15 @@
 #include <pybind11/pybind11.h>
 #include <chrono>
 #include <unistd.h>
-#include <string>
 #include <cstring>
-#include <iostream>
-#include <cstdio>
+#include <fcntl.h>
 
-std::chrono::high_resolution_clock::time_point start_time;
+namespace py = pybind11;
+
+static std::chrono::high_resolution_clock::time_point start_time;
 
 void start_measurement() {
     start_time = std::chrono::high_resolution_clock::now();
-    std::cerr << "DEBUG: start_measurement called\n";
 }
 
 void end_measurement() {
@@ -19,19 +18,18 @@ void end_measurement() {
     long long duration_us = duration.count();
 
     char buf[32];
-    snprintf(buf, sizeof(buf), "%lld", duration_us);
+    std::snprintf(buf, sizeof(buf), "%lld\n", duration_us);
 
-    std::cerr << "DEBUG: About to write to fd=3: " << buf << "\n";
-    ssize_t bytes_written = write(3, buf, strlen(buf));
-    if (bytes_written < 0) {
-        perror("DEBUG: write to time pipe failed");
-    } else {
-        std::cerr << "DEBUG: Wrote to time pipe: " << buf << " (" << bytes_written << " bytes)\n";
+    if (fcntl(3, F_GETFD) == -1) {
+        return;
     }
+
+    ssize_t bytes_written = write(3, buf, std::strlen(buf));
+    (void)bytes_written; // Suppress unused variable warning
+    fsync(3);
 }
 
 PYBIND11_MODULE(measure, m) {
-    m.doc() = "Python module for measurement functions";
     m.def("start_measurement", &start_measurement, "Start the measurement");
     m.def("end_measurement", &end_measurement, "End the measurement and write elapsed time to pipe");
 }
