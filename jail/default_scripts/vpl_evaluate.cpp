@@ -316,6 +316,8 @@
 		int expectedExitCode; // Default value numeric_limits<int>::min()
 		int exitCode; // Default value numeric_limits<int>::min()
 		string programOutputBefore, programOutputAfter, programInput;
+		std::chrono::duration<double, std::milli> solutionElapsedTime;
+  	    std::chrono::duration<double, std::milli> studentRunTime;
 
 		//Added by Tamar
 		string inputSize;
@@ -335,7 +337,7 @@
 		long maxResidentSetSize; // Memory usage in kilobytes
 	    timeval userTime;    // User CPU time
 	    timeval systemTime;  // System CPU time
-		
+		chrono::duration<double, std::milli> getSolutionElapsedTime() const;
 
 		static void setEnvironment(const char **environment);
 		void setDefaultCommand();
@@ -377,16 +379,20 @@
         double getStudentRunTime() const;
 
 };
-
-	/**
-	 * Class Evaluation Declaration
-	 */
 double TestCase::getStudentRunTime() const {
 	return studentRunTime.count();
 }
 void TestCase::setStudentRunTime(double runTime) {
 	studentRunTime = std::chrono::duration<double, std::milli>(runTime);
 }
+chrono::duration<double, std::milli> TestCase::getSolutionElapsedTime() const {
+	return solutionElapsedTime;
+}
+
+	/**
+	 * Class Evaluation Declaration
+	 */
+
 	class Evaluation {
 		int maxtime;
 		float grademin, grademax;
