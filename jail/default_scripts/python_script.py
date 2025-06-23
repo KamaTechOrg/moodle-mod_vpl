@@ -14,7 +14,7 @@ def logarithmic(x, a, b): return a * np.log(x) + b
 def exponential(x, a, b): return a * np.exp(b * x)
 
 # הפונקציה הראשית שמנתחת טסטים
-def analyze_tests(x_vals, y_vals):
+def analyze_complexity(x_vals, y_vals):
     warnings.filterwarnings("ignore")
     x = np.array(x_vals, dtype=float)
     y = np.array(y_vals, dtype=float)
@@ -60,16 +60,16 @@ def analyze_tests(x_vals, y_vals):
 
     return best_result["MSE"]
 
-
 if __name__ == "__main__":
     if len(sys.argv) < 3:
         print("Usage: python script.py <array1> <array2>")
         sys.exit(1)
 
-    x_vals = json.loads(sys.argv[1])  
-    y_vals = json.loads(sys.argv[2])  
+    try:
+        x_vals = json.loads(sys.argv[1])
+        y_vals = json.loads(sys.argv[2])
+    except json.JSONDecodeError:
+        print("Invalid JSON input.")
+        sys.exit(1) 
 
-    analyze_tests(x_vals, y_vals)
-    
-    
-
+    analyze_complexity(x_vals, y_vals)

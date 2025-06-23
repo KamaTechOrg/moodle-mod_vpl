@@ -392,13 +392,12 @@
 		volatile int ncomments;
 		volatile bool stopping;
 		static Evaluation *singlenton;
+		std::string bestComplexity;
+		double mse;
 		Evaluation();
 
 		//Added by Tamar
 		char executionErrorReason[1000];
-
-		std::string bestComplexity;
-        double mse;
 
 	public:
 		static Evaluation* getSinglenton();
@@ -2096,6 +2095,8 @@
 		nerrors = 0;
 		nruns = 0;
 		noGrade = true;
+	    bestComplexity = "";
+        mse = 0.0;
 
 		//Added by Tamar
 		strcpy(executionErrorReason, "");
@@ -2127,7 +2128,9 @@
         // שם הקובץ והנתיב ל-Python של הסביבה הווירטואלית
         std::string scriptName = "python_script.py";
         std::string pythonPath = "./venv/bin/python3"; // נתיב יחסי לסביבה הווירטואלית
-        std::string command = pythonPath + " " + scriptName + " '" + inputSizes_str + "' '" + runtimes_str + "'";
+		std::ostringstream cmd;
+		cmd << pythonPath << " " << scriptName << " '" << inputSizes_str << "' '" << runtimes_str << "'";
+		std::string command = cmd.str();
 
         if (!Tools::existFile(scriptName)) {
             std::cerr << "Error: Python script '" << scriptName << "' not found in current directory" << std::endl;
@@ -2145,7 +2148,7 @@
             result += buffer;
         }
         pclose(pipe);
-
+		
         size_t pos = result.find("Best model: ");
         if (pos != std::string::npos) {
             pos += strlen("Best model: ");
@@ -2165,11 +2168,6 @@
             }
         }
     }
-
-
-
-
-
 
 	void Evaluation::addTestCase(Case &caso) {
 		if ( caso.getVariation().size() && caso.getVariation() != variation ) {
@@ -2518,7 +2516,6 @@
 		vector<long> inputSizes;
 	    initializeVectors(runtimes, inputSizes, testCases.size());
 		
-
 		for (size_t i = 0; i < testCases.size(); i++) {
 			isCompetition = false;
 			printf("Testing %lu/%lu : %s\n", (unsigned long)i + 1, (unsigned long)testCases.size(), testCases[i].getCaseDescription().c_str());
@@ -2558,7 +2555,6 @@
 				}
 			}
 			nruns++;
-
 
 			float gr = testCases[i].getGradeReduction();
 			if (gr == numeric_limits<float>::min()){
@@ -2623,7 +2619,7 @@
 				}
 			}
 		}
-		
+
 	}
 
 	void Evaluation::initializeVectors(vector<double>& runtimes, vector<long>& inputSizes, size_t numCases) {
