@@ -288,127 +288,126 @@
 	 * Class TestCase Declaration
 	 * TestCase represents cases to tested
 	 */
-	class TestCase {
-		const char *command;
-		const char *teacherCommand;
-		const char **argv;
-		static const char **envv;
-		int id;
-		bool correctOutput;
-		bool outputTooLarge;
-		bool programTimeout;
-		bool programTimeoutInMs;
-		bool executionError;
-		bool correctExitCode;
-		char executionErrorReason[1000];
-		int sizeReaded;
-		string input;
-		vector< OutputChecker* > output;
-		string caseDescription;
-		float gradeReduction;
-		float gradeReductionApplied;
-		string failMessage;
-		string programToRun;
-		string programArgs;
-		string variantion;
-		int expectedExitCode; // Default value numeric_limits<int>::min()
-		int exitCode; // Default value numeric_limits<int>::min()
-		string programOutputBefore, programOutputAfter, programInput;
+class TestCase {
+    const char *command;
+    const char *teacherCommand;
+    const char **argv;
+    static const char **envv;
+    int id;
+    bool correctOutput;
+    bool outputTooLarge;
+    bool programTimeout;
+    bool programTimeoutInMs;
+    bool executionError;
+    bool correctExitCode;
+    char executionErrorReason[1000];
+    int sizeReaded;
+    string input;
+    vector< OutputChecker* > output;
+    string caseDescription;
+    float gradeReduction;
+    float gradeReductionApplied;
+    string failMessage;
+    string programToRun;
+    string programArgs;
+    string variantion;
+    int expectedExitCode;
+    int exitCode;
+    string programOutputBefore, programOutputAfter, programInput;
 
-		//Added by Tamar
-		string inputSize;
-		chrono::duration<double> elapsedTime;
-		double cpuTimeRatio;
+    // Added by Tamar
+    string inputSize;
+    chrono::duration<double> elapsedTime;
+    double cpuTimeRatio;
 
-		//int elapsedTime;
-
-		void cutOutputTooLarge(string &output);
-		void readWrite(int fdread, int fdwrite);
-		void addOutput(const string &o, const string &actualCaseDescription);
-	public:
-
-		//Added by Tamar
-		chrono::duration<double> getElapsedTime() const { return elapsedTime; }
-		double getCpuTimeRatio() const { return cpuTimeRatio; }
-		long maxResidentSetSize; // Memory usage in kilobytes
-	    timeval userTime;    // User CPU time
-	    timeval systemTime;  // System CPU time
-		
-
-		static void setEnvironment(const char **environment);
-		void setDefaultCommand();
-		TestCase(const TestCase &o);
-		TestCase& operator=(const TestCase &o);
-		~TestCase();
-		TestCase(int id, const string &input, const vector<string> &output,
-				const string &caseDescription, const float gradeReduction,
-				string failMessage, string programToRun, string programArgs, int expectedExitCode, const string &inputSize);
-		bool isCorrectResult();
-		bool isExitCodeTested();
-		float getGradeReduction();
-		void setGradeReductionApplied(float r);
-		float getGradeReductionApplied();
-		string getCaseDescription();
-
-		//Added by Tamar
-		string getInputSize();
-
-		string getCommentTitle(bool withGradeReduction/*=false*/); // Suui
-		string getComment();
-		void splitArgs(string);
-
-		//void compareTest(time_t timeout, chrono::milliseconds timeoutInMs);
-		void runTest(time_t timeout, chrono::milliseconds timeoutInMs); //Changed by Tamar
-		void runTestWithCompare(time_t timeout, chrono::milliseconds timeoutInMs); //Added by Tamar
-		string processArrayInput(const string &input);
-
-		bool match(string data);
+    // 💾 Added by Shira
+    long memoryUsageKB = 0; // Memory usage per test case in KB
+	long memoryUsageBefore = 0;
+    long memoryUsageAfter = 0;
 
 
-		bool setupPipes(ProcessInfo& process);
-		bool startProcess(ProcessInfo& process, const char** argv, const char** envv);
-		void closeUnusedPipeEnds(ProcessInfo& process);
-		void writeInputToProcess(ProcessInfo& process, const string& input);
-		void checkProcessTermination(ProcessInfo& process);
-		void compareAndPrintResults(const ProcessInfo& studentProcess, const ProcessInfo& teacherProcess);
-		
-	};
+    void cutOutputTooLarge(string &output);
+    void readWrite(int fdread, int fdwrite);
+    void addOutput(const string &o, const string &actualCaseDescription);
 
-	/**
-	 * Class Evaluation Declaration
-	 */
-	class Evaluation {
-		int maxtime;
-		float grademin, grademax;
-		string variation;
-		bool noGrade;
-		float grade;
-		int nerrors, nruns;
-		vector<TestCase> testCases;
-		char comments[MAXCOMMENTS + 1][MAXCOMMENTSLENGTH + 1];
-		char titles[MAXCOMMENTS + 1][MAXCOMMENTSTITLELENGTH + 1];
-		char titlesGR[MAXCOMMENTS + 1][MAXCOMMENTSTITLELENGTH + 1];
-		volatile int ncomments;
-		volatile bool stopping;
-		static Evaluation *singlenton;
-		Evaluation();
+public:
+    // Added by Tamar
+    chrono::duration<double> getElapsedTime() const { return elapsedTime; }
+    double getCpuTimeRatio() const { return cpuTimeRatio; }
+    long maxResidentSetSize;
+    timeval userTime;	
+    timeval systemTime;
 
-		//Added by Tamar
-		char executionErrorReason[1000];
+    // 💾 Added by Shira
+    void collectMemoryUsage();       
+    long getMemoryUsageKB() const;
+	void markMemoryBefore();
+    void markMemoryAfter();
+    long getMemoryUsageDiff() const;
 
 
-	public:
-		static Evaluation* getSinglenton();
-		static void deleteSinglenton();
-		void addTestCase(Case &);
-		void removeLastNL(string &s);
-		bool cutToEndTag(string &value, const string &endTag);
-		void loadTestCases(string fname);
-		bool loadParams();
-		void addFatalError(const char *m);
-		void runTests();
-		void outputEvaluation();
-	};
+    static void setEnvironment(const char **environment);
+    void setDefaultCommand();
+    TestCase(const TestCase &o);
+    TestCase& operator=(const TestCase &o);
+    ~TestCase();
+    TestCase(int id, const string &input, const vector<string> &output,
+            const string &caseDescription, const float gradeReduction,
+            string failMessage, string programToRun, string programArgs, int expectedExitCode, const string &inputSize);
+    bool isCorrectResult();
+    bool isExitCodeTested();
+    float getGradeReduction();
+    void setGradeReductionApplied(float r);
+    float getGradeReductionApplied();
+    string getCaseDescription();
+
+    // Added by Tamar
+    string getInputSize();
+
+    string getCommentTitle(bool withGradeReduction = false);
+    string getComment();
+    void splitArgs(string);
+    void runTest(time_t timeout, chrono::milliseconds timeoutInMs); // Changed by Tamar
+    void runTestWithCompare(time_t timeout, chrono::milliseconds timeoutInMs); // Added by Tamar
+    string processArrayInput(const string &input);
+
+    bool match(string data);
+    bool setupPipes(ProcessInfo& process);
+    bool startProcess(ProcessInfo& process, const char** argv, const char** envv);
+    void closeUnusedPipeEnds(ProcessInfo& process);
+    void writeInputToProcess(ProcessInfo& process, const string& input);
+    void checkProcessTermination(ProcessInfo& process);
+    void compareAndPrintResults(const ProcessInfo& studentProcess, const ProcessInfo& teacherProcess);
+    // Added by Shira
+    void collectMemoryUsage() {
+        struct rusage usage;
+        getrusage(RUSAGE_CHILDREN, &usage);
+        memoryUsageKB = usage.ru_maxrss;
+    }
+
+    long getMemoryUsageKB() const {
+        return memoryUsageKB;
+    }
+	
+    void markMemoryBefore() {
+        struct rusage usage;
+        getrusage(RUSAGE_CHILDREN, &usage);
+        memoryUsageBefore = usage.ru_maxrss;
+    }
+
+    void markMemoryAfter() {
+        struct rusage usage;
+        getrusage(RUSAGE_CHILDREN, &usage);
+        memoryUsageAfter = usage.ru_maxrss;
+    }
+
+    long getMemoryUsageDiff() const {
+        return memoryUsageAfter - memoryUsageBefore;
+    }
+};
+
+
+
 
 	/////////////////////////////////////////////////////////////////////////////////////////////////
 	////////////////////////////////////////////////////////////////////////////////////////////////
@@ -539,6 +538,7 @@
 		return text.substr(0, end + 1);
 	}
 
+	
 	string Tools::trim(const string &text) {
 		int len = text.size();
 		int begin = len;
@@ -1781,129 +1781,132 @@
 	}
 
 
+void TestCase::runTest(time_t timeout, chrono::milliseconds timeoutInMs) { // Changed by Tamar
+    time_t start = time(NULL);
+    input = processArrayInput(input);
+    elapsedTime = chrono::milliseconds(0);
+    int pp1[2]; // Send data
+    int pp2[2]; // Receive data
 
-	void TestCase::runTest(time_t timeout, chrono::milliseconds timeoutInMs) { //Changed by Tamar
-		time_t start = time(NULL);
-		//Added by Tamar
-		input = processArrayInput(input);
-		//auto startInMs = chrono::high_resolution_clock::now();
-		elapsedTime = chrono::milliseconds(0);
-		int pp1[2]; // Send data
-		int pp2[2]; // Receive data
-		if (pipe(pp1) == -1 || pipe(pp2) == -1) {
-			executionError = true;
-			sprintf(executionErrorReason, "Internal error: pipe error (%s)", strerror(errno));
-			return;
-		}
-		if (programToRun > "" && programToRun.size() < 512) {
-			command = programToRun.c_str();
-		}
-		if (!Tools::existFile(command)) {
-			executionError = true;
-			sprintf(executionErrorReason, "Execution file not found '%s'", command);
-			return;
-		}
-		pid_t pid;
-		if (programArgs.size() > 0) {
-			splitArgs(programArgs);
-		}
-		if ((pid = fork()) == 0) {
-			// Execute
-			close(pp1[1]);
-			dup2(pp1[0], STDIN_FILENO);
-			close(pp2[0]);
-			dup2(pp2[1], STDOUT_FILENO);
-			dup2(STDOUT_FILENO, STDERR_FILENO);
-			setpgrp();
-			execve(command, (char *const *)argv, (char *const *)envv);
-			perror("Internal error, execve fails");
-			abort(); //end of child
-		}
-		if (pid == -1) {
-			executionError = true;
-			sprintf(executionErrorReason, "Internal error: fork error (%s)", strerror(errno));
-			return;
-		}
-		close(pp1[0]);
-		close(pp2[1]);
-		int fdwrite = pp1[1];
-		int fdread = pp2[0];
-		Tools::fdblock(fdwrite, false);
-		Tools::fdblock(fdread, false);
-		programInput = input;
-		if (programInput.size() == 0) { // No input
-			close(fdwrite);
-		}
-		programOutputBefore = "";
-		programOutputAfter = "";
-		pid_t pidr;
-		int status;
-		exitCode = numeric_limits<int>::min();
-		//Added by Tamar
-		auto startInMs = chrono::high_resolution_clock::now();
-		struct rusage ru;
-		while ((pidr = wait4(pid, &status, WNOHANG | WUNTRACED, &ru)) == 0) {
-			readWrite(fdread, fdwrite);
-			usleep(5000);
+    if (pipe(pp1) == -1 || pipe(pp2) == -1) {
+        executionError = true;
+        sprintf(executionErrorReason, "Internal error: pipe error (%s)", strerror(errno));
+        return;
+    }
 
-			// TERMSIG or timeout or program output too large?
-			if (Stop::isTERMRequested() || (time(NULL) - start) >= timeout || outputTooLarge) { //Changed by Tamar
-				
-				//Added by Tamar
-				//if ((now - startInMs) >= timeoutInMs && timeoutInMs != chrono::milliseconds(0)) {
-				//    programTimeoutInMs = true;
-				//}
+    if (programToRun > "" && programToRun.size() < 512) {
+        command = programToRun.c_str();
+    }
 
-				if ((time(NULL) - start) >= timeout) {
-					programTimeout = true;
-				}
-				kill(pid, SIGTERM); // Send SIGTERM normal termination
-				int otherstatus;
-				usleep(5000);
-				if (waitpid(pid, &otherstatus, WNOHANG | WUNTRACED) == pid) {
-					break;
-				}
-				if (kill(pid, SIGQUIT) == 0) { // Kill
-					break;
-				}
-			}
-		}
-		
-		//Added by Tamar
-		auto endInMs = chrono::high_resolution_clock::now();
-		elapsedTime = chrono::duration_cast<chrono::milliseconds>(endInMs - startInMs);
-		userTime = ru.ru_utime;
-		systemTime = ru.ru_stime;
+    if (!Tools::existFile(command)) {
+        executionError = true;
+        sprintf(executionErrorReason, "Execution file not found '%s'", command);
+        return;
+    }
 
-		if (pidr == pid) {
-			if (WIFSIGNALED(status)) {
-				int signal = WTERMSIG(status);
-				executionError = true;
-				sprintf(executionErrorReason, "Program terminated due to \"%s\" (%d)\n", strsignal(signal), signal);
-			}
-			if (WIFEXITED(status)) {
-				exitCode = WEXITSTATUS(status);
-			} else {
-				executionError = true;
-				strcpy(executionErrorReason, "Program terminated but unknown reason.");
-			}
+    if (programArgs.size() > 0) {
+        splitArgs(programArgs);
+    }
 
-			//Added by Tamar
-			struct rusage ru;
-			if (getrusage(RUSAGE_CHILDREN, &ru) == 0) {
-				maxResidentSetSize = ru.ru_maxrss; // In kilobytes
-			}
+    // 💾 מדידה לפני יצירת תהליך הבן
+    markMemoryBefore();
 
+    pid_t pid;
+    if ((pid = fork()) == 0) {
+        // Child process
+        close(pp1[1]);
+        dup2(pp1[0], STDIN_FILENO);
+        close(pp2[0]);
+        dup2(pp2[1], STDOUT_FILENO);
+        dup2(STDOUT_FILENO, STDERR_FILENO);
+        setpgrp();
+        execve(command, (char *const *)argv, (char *const *)envv);
+        perror("Internal error, execve fails");
+        abort(); // end of child
+    }
 
-		} else if (pidr != 0) {
-			executionError = true;
-			strcpy(executionErrorReason, "waitpid error");
-		}
-		readWrite(fdread, fdwrite);
-		correctExitCode = isExitCodeTested() && expectedExitCode == exitCode;
-		correctOutput = match(programOutputAfter) || match(programOutputBefore + programOutputAfter);
+    if (pid == -1) {
+        executionError = true;
+        sprintf(executionErrorReason, "Internal error: fork error (%s)", strerror(errno));
+        return;
+    }
 
-	}
+    close(pp1[0]);
+    close(pp2[1]);
+    int fdwrite = pp1[1];
+    int fdread = pp2[0];
+    Tools::fdblock(fdwrite, false);
+    Tools::fdblock(fdread, false);
+    programInput = input;
+    if (programInput.size() == 0) {
+        close(fdwrite);
+    }
+
+    programOutputBefore = "";
+    programOutputAfter = "";
+
+    pid_t pidr;
+    int status;
+    exitCode = numeric_limits<int>::min();
+    auto startInMs = chrono::high_resolution_clock::now();
+    struct rusage ru;
+
+    while ((pidr = wait4(pid, &status, WNOHANG | WUNTRACED, &ru)) == 0) {
+        readWrite(fdread, fdwrite);
+        usleep(5000);
+
+        if (Stop::isTERMRequested() || (time(NULL) - start) >= timeout || outputTooLarge) {
+            if ((time(NULL) - start) >= timeout) {
+                programTimeout = true;
+            }
+            kill(pid, SIGTERM);
+            int otherstatus;
+            usleep(5000);
+            if (waitpid(pid, &otherstatus, WNOHANG | WUNTRACED) == pid) {
+                break;
+            }
+            if (kill(pid, SIGQUIT) == 0) {
+                break;
+            }
+        }
+    }
+
+    auto endInMs = chrono::high_resolution_clock::now();
+    elapsedTime = chrono::duration_cast<chrono::milliseconds>(endInMs - startInMs);
+    userTime = ru.ru_utime;
+    systemTime = ru.ru_stime;
+
+    if (pidr == pid) {
+        if (WIFSIGNALED(status)) {
+            int signal = WTERMSIG(status);
+            executionError = true;
+            sprintf(executionErrorReason, "Program terminated due to \"%s\" (%d)\n", strsignal(signal), signal);
+        }
+        if (WIFEXITED(status)) {
+            exitCode = WEXITSTATUS(status);
+        } else {
+            executionError = true;
+            strcpy(executionErrorReason, "Program terminated but unknown reason.");
+        }
+
+        struct rusage ru_end;
+        if (getrusage(RUSAGE_CHILDREN, &ru_end) == 0) {
+            maxResidentSetSize = ru_end.ru_maxrss;
+        }
+    } else if (pidr != 0) {
+        executionError = true;
+        strcpy(executionErrorReason, "waitpid error");
+    }
+
+    readWrite(fdread, fdwrite);
+
+    // 💾 מדידה אחרי סיום תהליך הבן
+    markMemoryAfter();
+
+    correctExitCode = isExitCodeTested() && expectedExitCode == exitCode;
+    correctOutput = match(programOutputAfter) || match(programOutputBefore + programOutputAfter);
+}
+
 
 
 
@@ -2613,7 +2616,7 @@
 				string testName = testCases[i].getCaseDescription();
 				string inputSize = testCases[i].getInputSize();
 				chrono::duration<double, milli> elapsed_ms = testCases[i].getElapsedTime();
-				long memoryKB = testCases[i].maxResidentSetSize;
+				long memoryKB = testCases[i].getMemoryUsageKB();
 				double userTime_ms = testCases[i].userTime.tv_sec * 1000.0 + testCases[i].userTime.tv_usec / 1000.0;
 				double systemTime_ms = testCases[i].systemTime.tv_sec * 1000.0 + testCases[i].systemTime.tv_usec / 1000.0;
 				double totalCpuTime_ms = userTime_ms + systemTime_ms;
