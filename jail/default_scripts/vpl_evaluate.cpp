@@ -35,6 +35,7 @@
 #include <fcntl.h>
 #include <signal.h>
 #include <sys/resource.h>
+#include <string>
 #include <execinfo.h>
 #include <regex.h>
 
