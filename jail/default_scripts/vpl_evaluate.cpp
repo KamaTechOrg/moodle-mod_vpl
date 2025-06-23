@@ -2134,11 +2134,14 @@
 
         if (!Tools::existFile(scriptName)) {
             std::cerr << "Error: Python script '" << scriptName << "' not found in current directory" << std::endl;
+		    strcpy(executionErrorReason, "Python script not found");
+			return;
 		}
 
         FILE* pipe = popen(command.c_str(), "r");
         if (!pipe) {
             std::cerr << "Failed to run Python script" << std::endl;
+			strcpy(executionErrorReason, "Failed to execute Python script");
             return;
         }
 
@@ -2147,8 +2150,20 @@
         while (fgets(buffer, sizeof(buffer), pipe) != nullptr) {
             result += buffer;
         }
-        pclose(pipe);
-		
+        
+        int exitCode = pclose(pipe);
+		if (exitCode != 0) {
+    		std::cerr << "Python script exited with code " << exitCode << std::endl;
+    		sprintf(executionErrorReason, "Python script failed with exit code %d", exitCode);
+    		return;
+		}
+
+		if (result.empty()) {
+    		std::cerr << "Error: Python script returned empty output" << std::endl;
+    		strcpy(executionErrorReason, "Python script returned empty output");
+    		return;
+		}
+
         size_t pos = result.find("Best model: ");
         if (pos != std::string::npos) {
             pos += strlen("Best model: ");
