@@ -316,7 +316,6 @@
 		int expectedExitCode; // Default value numeric_limits<int>::min()
 		int exitCode; // Default value numeric_limits<int>::min()
 		string programOutputBefore, programOutputAfter, programInput;
-		std::chrono::duration<double, std::milli> solutionElapsedTime;
   	    std::chrono::duration<double, std::milli> studentRunTime;
 
 		//Added by Tamar
@@ -337,8 +336,6 @@
 		long maxResidentSetSize; // Memory usage in kilobytes
 	    timeval userTime;    // User CPU time
 	    timeval systemTime;  // System CPU time
-		chrono::duration<double, std::milli> getSolutionElapsedTime() const;
-
 		static void setEnvironment(const char **environment);
 		void setDefaultCommand();
 		TestCase(const TestCase &o);
@@ -384,9 +381,6 @@ double TestCase::getStudentRunTime() const {
 }
 void TestCase::setStudentRunTime(double runTime) {
 	studentRunTime = std::chrono::duration<double, std::milli>(runTime);
-}
-chrono::duration<double, std::milli> TestCase::getSolutionElapsedTime() const {
-	return solutionElapsedTime;
 }
 
 	/**
@@ -1804,44 +1798,41 @@ void TestCase::compareAndPrintResults(const ProcessInfo& studentProcess, const P
 
 
 	void TestCase::runTest(time_t timeout, chrono::milliseconds timeoutInMs) { //Changed by Tamar
-		time_t start = time(NULL);
-		//Added by Tamar
-		input = processArrayInput(input);
-		//auto startInMs = chrono::high_resolution_clock::now();
-		elapsedTime = chrono::milliseconds(0);
-	    measuredTime = 0;
-		int pp1[2]; // Send data
-		int pp2[2]; // Receive data
-		int timePipe[2];
-  		  if (pipe(pp1) == -1 || pipe(pp2) == -1 || pipe(timePipe) == -1) {
-			executionError = true;
-			sprintf(executionErrorReason, "Internal error: pipe error (%s)", strerror(errno));
-			return;
-		}
-		if (programToRun > "" && programToRun.size() < 512) {
-			command = programToRun.c_str();
-        }
-		if (!Tools::existFile(command)) {
-			executionError = true;
-			sprintf(executionErrorReason, "Execution file not found '%s'", command);
-			return;
-		}
-		pid_t pid;
-		if (programArgs.size() > 0) {
-			splitArgs(programArgs);
-		}
-        int flags = fcntl(timePipe[0], F_GETFL);
-       if (flags == -1 || fcntl(timePipe[0], F_SETFL, flags & ~O_NONBLOCK) == -1) {
+    time_t start = time(NULL);
+    input = processArrayInput(input);
+    elapsedTime = chrono::milliseconds(0);
+    measuredTime = 0;
+    int pp1[2]; 
+    int pp2[2]; 
+    int timePipe[2];
+    if (pipe(pp1) == -1 || pipe(pp2) == -1 || pipe(timePipe) == -1) {
+        executionError = true;
+        sprintf(executionErrorReason, "Internal error: pipe error (%s)", strerror(errno));
+        return;
+    }
+    if (programToRun > "" && programToRun.size() < 512) {
+        command = programToRun.c_str();
+    }
+    if (!Tools::existFile(command)) {
+        executionError = true;
+        sprintf(executionErrorReason, "Execution file not found '%s'", command);
+        return;
+    }
+    pid_t pid;
+    if (programArgs.size() > 0) {
+        splitArgs(programArgs);
+    }
+    int flags = fcntl(timePipe[0], F_GETFL);
+    if (flags == -1 || fcntl(timePipe[0], F_SETFL, flags & ~O_NONBLOCK) == -1) {
         executionError = true;
         sprintf(executionErrorReason, "Internal error: failed to set time pipe to blocking (%s)", strerror(errno));
         close(pp1[0]); close(pp1[1]); close(pp2[0]); close(pp2[1]); close(timePipe[0]); close(timePipe[1]);
         return;
-        }
-        pid = fork();
+    }
+    pid = fork();
     if (pid == 0) {
-			// Execute
-			close(pp1[1]);
-			dup2(pp1[0], STDIN_FILENO);
+        close(pp1[1]);
+        dup2(pp1[0], STDIN_FILENO);
         close(pp1[0]);
         close(pp2[0]);
         dup2(pp2[1], STDOUT_FILENO);
@@ -1850,24 +1841,24 @@ void TestCase::compareAndPrintResults(const ProcessInfo& studentProcess, const P
         close(timePipe[0]);
         dup2(timePipe[1], 3);
         close(timePipe[1]);
-			setpgrp();
-			execve(command, (char *const *)argv, (char *const *)envv);
-			perror("Internal error, execve fails");
-			abort(); //end of child
-		}
-		if (pid == -1) {
-			executionError = true;
-			sprintf(executionErrorReason, "Internal error: fork error (%s)", strerror(errno));
-	        close(pp1[0]);
-	        close(pp1[1]);
-	        close(pp2[0]);
-	        close(pp2[1]);
-	        close(timePipe[0]);
-	        close(timePipe[1]);
-			return;
-		}
-		close(pp1[0]);
-		close(pp2[1]);
+        setpgrp();
+        execve(command, (char *const *)argv, (char *const *)envv);
+        perror("Internal error, execve fails");
+        abort();
+    }
+    if (pid == -1) {
+        executionError = true;
+        sprintf(executionErrorReason, "Internal error: fork error (%s)", strerror(errno));
+        close(pp1[0]);
+        close(pp1[1]);
+        close(pp2[0]);
+        close(pp2[1]);
+        close(timePipe[0]);
+        close(timePipe[1]);
+        return;
+    }
+    close(pp1[0]);
+    close(pp2[1]);
     close(timePipe[1]);
     int fdwrite = pp1[1];
     int fdread = pp2[0];
@@ -1875,98 +1866,91 @@ void TestCase::compareAndPrintResults(const ProcessInfo& studentProcess, const P
     Tools::fdblock(fdwrite, false);
     Tools::fdblock(fdread, false);
     Tools::fdblock(timefd, false);
-		programInput = input;
-		if (programInput.size() == 0) { // No input
-			close(fdwrite);
-		}
-		programOutputBefore = "";
-		programOutputAfter = "";
-		pid_t pidr;
-		int status;
-		exitCode = numeric_limits<int>::min();
-		//Added by Tamar
-		auto startInMs = chrono::high_resolution_clock::now();
-		struct rusage ru;
-        string timeData;
-		while ((pidr = wait4(pid, &status, WNOHANG | WUNTRACED, &ru)) == 0) {
-			readWrite(fdread, fdwrite);
+    programInput = input;
+    if (programInput.size() == 0) { 
+        close(fdwrite);
+    }
+    programOutputBefore = "";
+    programOutputAfter = "";
+    pid_t pidr;
+    int status;
+    exitCode = numeric_limits<int>::min();
+    //Added by Tamar
+    auto startInMs = chrono::high_resolution_clock::now();
+    struct rusage ru;
+    string timeData;
+    while ((pidr = wait4(pid, &status, WNOHANG | WUNTRACED, &ru)) == 0) {
+        readWrite(fdread, fdwrite);
         char buf[32] = {0};
         ssize_t bytesRead;
-        int retries = 5; // Try reading up to 5 times
+        int retries = 5; 
         while (retries > 0) {
-            bytesRead = read(timefd, buf, sizeof(buf)-1);
+            bytesRead = read(timefd, buf, sizeof(buf) - 1);
             if (bytesRead > 0) {
                 buf[bytesRead] = '\0';
                 measuredTime = atoll(buf);
-                setStudentRunTime(measuredTime / 1000.0); // Convert microseconds to milliseconds
+                setStudentRunTime(measuredTime / 1000.0);
                 cerr << "DEBUG: Read from time pipe: " << buf << ", measuredTime=" << measuredTime << endl;
                 break;
             } else if (bytesRead == -1 && errno == EAGAIN) {
-                
-        cerr << "DEBUG: Captured output (before): '" << programOutputBefore << "'\n";
-	    cerr << "DEBUG: No data read from time pipe after retries" << endl;
+                --retries;
+                usleep(5000);
+            }
+        }
+        if (measuredTime == 0) {
             readFromPipe(timefd, timeData);
-			usleep(5000);
-
-			// TERMSIG or timeout or program output too large?
-			if (Stop::isTERMRequested() || (time(NULL) - start) >= timeout || outputTooLarge) { //Changed by Tamar
-				
-				if ((time(NULL) - start) >= timeout) {
-					programTimeout = true;
-				}
-				kill(pid, SIGTERM); // Send SIGTERM normal termination
-				int otherstatus;
-				usleep(5000);
-                if (waitpid(pid, &otherstatus, WNOHANG | WUNTRACED) == pid) {
-					break;
-				}
-				if (kill(pid, SIGQUIT) == 0) { // Kill
-					break;
-				}
-			}
-		}
-    readFromPipe(timefd, timeData);
-    if (!timeData.empty()) {
-            measuredTime = stoll(timeData);
-            setStudentRunTime(measuredTime / 1000.0);
+            if (!timeData.empty()) {
+                measuredTime = stoll(timeData);
+                setStudentRunTime(measuredTime / 1000.0);
+            } else {
+                cerr << "DEBUG: Captured output (before): '" << programOutputBefore << "'\n";
+                cerr << "DEBUG: No data read from time pipe after retries" << endl;
+            }
+        }
+        if (Stop::isTERMRequested() || (time(NULL) - start) >= timeout || outputTooLarge) {
+            if ((time(NULL) - start) >= timeout) {
+                programTimeout = true;
+            }
+            kill(pid, SIGTERM); 
+            int otherstatus;
+            usleep(5000);
+            if (waitpid(pid, &otherstatus, WNOHANG | WUNTRACED) == pid) {
+                break;
+            }
+            if (kill(pid, SIGQUIT) == 0) {
+                break;
+            }
+        }
     }
     close(timefd);
-		auto endInMs = chrono::high_resolution_clock::now();
-		elapsedTime = chrono::duration_cast<chrono::milliseconds>(endInMs - startInMs);
-		userTime = ru.ru_utime;
-		systemTime = ru.ru_stime;
-
-		if (pidr == pid) {
-			if (WIFSIGNALED(status)) {
-				int signal = WTERMSIG(status);
-				executionError = true;
-				sprintf(executionErrorReason, "Program terminated due to \"%s\" (%d)\n", strsignal(signal), signal);
-			}
-			if (WIFEXITED(status)) {
-				exitCode = WEXITSTATUS(status);
-			} else {
-				executionError = true;
+    auto endInMs = chrono::high_resolution_clock::now();
+    elapsedTime = chrono::duration_cast<chrono::milliseconds>(endInMs - startInMs);
+    userTime = ru.ru_utime;
+    systemTime = ru.ru_stime;
+    if (pidr == pid) {
+        if (WIFSIGNALED(status)) {
+            int signal = WTERMSIG(status);
+            executionError = true;
+            sprintf(executionErrorReason, "Program terminated due to \"%s\" (%d)\n", strsignal(signal), signal);
+        }
+        if (WIFEXITED(status)) {
+            exitCode = WEXITSTATUS(status);
+        } else {
+            executionError = true;
             strcpy(executionErrorReason, "<Program terminated but unknown reason>.");
-			}
-
-			//Added by Tamar
-		//	struct rusage ru;
-			if (getrusage(RUSAGE_CHILDREN, &ru) == 0) {
-				maxResidentSetSize = ru.ru_maxrss; // In kilobytes
-			}
-
-
-		} else if (pidr != 0) {
-			executionError = true;
-            strcpy(executionErrorReason, "<waitpid error>");
-		}
-		readWrite(fdread, fdwrite);
-		correctExitCode = isExitCodeTested() && expectedExitCode == exitCode;
+        }
+        //Added by Tamar
+        if (getrusage(RUSAGE_CHILDREN, &ru) == 0) {
+            maxResidentSetSize = ru.ru_maxrss; 
+        }
+    } else if (pidr != 0) {
+        executionError = true;
+        strcpy(executionErrorReason, "<waitpid error>");
+    }
+    readWrite(fdread, fdwrite);
+    correctExitCode = isExitCodeTested() && expectedExitCode == exitCode;
     correctOutput = match(programOutputBefore + programOutputAfter) || match(programOutputAfter);
-
-	}
-
-
+}
 
 
 
@@ -1991,14 +1975,21 @@ void TestCase::compareAndPrintResults(const ProcessInfo& studentProcess, const P
 		return;
 	}
 
-	if (programArgs.size() > 0) {
+	if (!Tools::existFile(teacherCommand)) {
+		executionError = true;
+		sprintf(executionErrorReason, "Execution file not found '%s'", teacherCommand);
+		return;
+	}
+
+	if (!programArgs.empty()) {
 		splitArgs(programArgs);
 	}
 
-	ProcessInfo studentProcess;
+	ProcessInfo studentProcess, teacherProcess;
 	studentProcess.command = command;
+	teacherProcess.command = teacherCommand;
 
-	if (!setupPipes(studentProcess)) {
+	if (!setupPipes(studentProcess) || !setupPipes(teacherProcess)) {
 		return;
 	}
 
@@ -2009,28 +2000,27 @@ void TestCase::compareAndPrintResults(const ProcessInfo& studentProcess, const P
 		return;
 	}
 
-	if (!startProcess(studentProcess, argv, envv)) {
-		return;
-	}
+	if (!startProcess(studentProcess, argv, envv)) return;
+	if (!startProcess(teacherProcess, argv, envv)) return;
 
 	closeUnusedPipeEnds(studentProcess);
+	closeUnusedPipeEnds(teacherProcess);
 
 	Tools::fdblock(studentProcess.outPipe[0], false);
+	Tools::fdblock(teacherProcess.outPipe[0], false);
 
 	programInput = input;
 	if (!programInput.empty()) {
-		if (programInput.back() != '\n') {
-			programInput += '\n';
-		}
+		if (programInput.back() != '\n') programInput += '\n';
 		writeInputToProcess(studentProcess, programInput);
+		writeInputToProcess(teacherProcess, programInput);
 	}
 
-	auto startTime = chrono::high_resolution_clock::now();
-	studentProcess.startTime = startTime;
+
 
 	string timeData;
 
-	while (!studentProcess.finished) {
+	while (!studentProcess.finished || !teacherProcess.finished) {
 		fd_set readfds;
 		FD_ZERO(&readfds);
 		int maxfd = 0;
@@ -2041,10 +2031,12 @@ void TestCase::compareAndPrintResults(const ProcessInfo& studentProcess, const P
 			maxfd = max(studentProcess.outPipe[0], studentProcess.timePipe[0]);
 		}
 
-		struct timeval tv;
-		tv.tv_sec = 0;
-		tv.tv_usec = 5000;
+		if (!teacherProcess.finished) {
+			FD_SET(teacherProcess.outPipe[0], &readfds);
+			maxfd = max(maxfd, teacherProcess.outPipe[0]);
+		}
 
+		struct timeval tv = {0, 5000};
 		int ret = select(maxfd + 1, &readfds, NULL, NULL, &tv);
 		if (ret > 0) {
 			if (!studentProcess.finished && FD_ISSET(studentProcess.outPipe[0], &readfds)) {
@@ -2052,6 +2044,9 @@ void TestCase::compareAndPrintResults(const ProcessInfo& studentProcess, const P
 			}
 			if (!studentProcess.finished && FD_ISSET(studentProcess.timePipe[0], &readfds)) {
 				readFromPipe(studentProcess.timePipe[0], timeData);
+			}
+			if (!teacherProcess.finished && FD_ISSET(teacherProcess.outPipe[0], &readfds)) {
+				readFromPipe(teacherProcess.outPipe[0], teacherProcess.output);
 			}
 		}
 
@@ -2066,16 +2061,25 @@ void TestCase::compareAndPrintResults(const ProcessInfo& studentProcess, const P
 			}
 		}
 
+		if (!teacherProcess.finished) {
+			checkProcessTermination(teacherProcess);
+		}
+
 		if (Stop::isTERMRequested() || (time(NULL) - start) >= timeout || outputTooLarge) {
-			if ((time(NULL) - start) >= timeout) {
-				programTimeout = true;
-			}
+			if ((time(NULL) - start) >= timeout) programTimeout = true;
 			if (!studentProcess.finished) {
 				kill(studentProcess.pid, SIGTERM);
 				usleep(3000);
 				waitpid(studentProcess.pid, NULL, WNOHANG | WUNTRACED);
 				kill(studentProcess.pid, SIGQUIT);
 				studentProcess.finished = true;
+			}
+			if (!teacherProcess.finished) {
+				kill(teacherProcess.pid, SIGTERM);
+				usleep(3000);
+				waitpid(teacherProcess.pid, NULL, WNOHANG | WUNTRACED);
+				kill(teacherProcess.pid, SIGQUIT);
+				teacherProcess.finished = true;
 			}
 			break;
 		}
@@ -2088,6 +2092,11 @@ void TestCase::compareAndPrintResults(const ProcessInfo& studentProcess, const P
 		close(studentProcess.timePipe[0]);
 	}
 
+	if (!teacherProcess.finished) {
+		readFromPipe(teacherProcess.outPipe[0], teacherProcess.output);
+		close(teacherProcess.outPipe[0]);
+	}
+
 	if (!timeData.empty()) {
 		measuredTime = stoll(timeData);
 		setStudentRunTime(measuredTime / 1000.0);
@@ -2097,8 +2106,10 @@ void TestCase::compareAndPrintResults(const ProcessInfo& studentProcess, const P
 
 	correctExitCode = isExitCodeTested() && expectedExitCode == exitCode;
 	correctOutput = match(studentProcess.output) || match(programOutputBefore + studentProcess.output);
-	compareAndPrintResults(studentProcess, ProcessInfo(), measuredTime / 1000.0); // שלח ProcessInfo ריק עבור מורה
+	compareAndPrintResults(studentProcess, teacherProcess, measuredTime / 1000.0);
 }
+
+
 
 
 
