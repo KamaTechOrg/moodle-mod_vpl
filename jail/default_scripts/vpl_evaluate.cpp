@@ -20,7 +20,7 @@
 #include <cmath>
 #include <cstdint>
 
-<<<<<<< HEAD
+
 // ===== POSIX / Unix system headers =====
 #include <unistd.h>
 #include <sys/types.h>
@@ -39,17 +39,6 @@
 #include <string>
 #include <execinfo.h>
 #include <regex.h>
-=======
-	//Added by Tamar
-	#include <chrono>
-	#include <regex>
-	#include <random>
-	#include <fstream>
-	#include <sys/resource.h>
-	#include <iomanip>
-#include <fcntl.h>
-	#include "json.hpp"
->>>>>>> origin/I2_Team
 
 
 // ===== C++ standard library headers =====
@@ -341,11 +330,9 @@
 		int expectedExitCode; // Default value numeric_limits<int>::min()
 		int exitCode; // Default value numeric_limits<int>::min()
 		string programOutputBefore, programOutputAfter, programInput;
-<<<<<<< HEAD
+
 		uint64_t cpuInstructions;
-=======
   	    std::chrono::duration<double, std::milli> studentRunTime;
->>>>>>> origin/I2_Team
 
 		//Added by Tamar
 		string inputSize;
@@ -1282,20 +1269,13 @@ void TestCase::setStudentRunTime(double runTime) {
 
 		//Added by Tamar
 		inputSize=o.inputSize;
-<<<<<<< HEAD
-	    maxResidentSetSize = 0;
-        userTime = {0, 0};
-        systemTime = {0, 0};
-		cpuTimeRatio =0;
-		cpuInstructions=0;
-
-=======
 	    maxResidentSetSize = o.maxResidentSetSize;
 	    userTime = o.userTime;
 	    systemTime = o.systemTime;
 	    cpuTimeRatio = o.cpuTimeRatio;
 	    measuredTime = o.measuredTime;
->>>>>>> origin/I2_Team
+		cpuInstructions=0;
+
 		for(size_t i = 0; i < o.output.size(); i++){
 			output.push_back(o.output[i]->clone());
 		}
@@ -1416,14 +1396,11 @@ void TestCase::setStudentRunTime(double runTime) {
 		return inputSize;
 	}
 
-<<<<<<< HEAD
 	//added by michal
 	uint64_t TestCase::getcpuInstructions(){
 		return cpuInstructions;
-	 }
+	}
 
-	string TestCase::getCommentTitle(bool withGradeReduction=false) {
-=======
 	string TestCase::getCommentTitle(bool withGradeReduction) {
 >>>>>>> origin/I2_Team
 		char buf[100];
@@ -1886,292 +1863,6 @@ uint64_t stopPerfCounting(int fd) {
 
 
 	void TestCase::runTest(time_t timeout, chrono::milliseconds timeoutInMs) { //Changed by Tamar
-<<<<<<< HEAD
-		time_t start = time(NULL);
-		//Added by Tamar
-		input = processArrayInput(input);
-		//auto startInMs = chrono::high_resolution_clock::now();
-		elapsedTime = chrono::milliseconds(0);
-		int pp1[2]; // Send data
-		int pp2[2]; // Receive data
-		if (pipe(pp1) == -1 || pipe(pp2) == -1) {
-			executionError = true;
-			sprintf(executionErrorReason, "Internal error: pipe error (%s)", strerror(errno));
-			return;
-		}
-		if (programToRun > "" && programToRun.size() < 512) {
-			command = programToRun.c_str();
-		}
-		if (!Tools::existFile(command)) {
-			executionError = true;
-			sprintf(executionErrorReason, "Execution file not found '%s'", command);
-			return;
-		}
-		pid_t pid;
-		if (programArgs.size() > 0) {
-			splitArgs(programArgs);
-		}
-		if ((pid = fork()) == 0) {
-			// Execute
-			close(pp1[1]);
-			dup2(pp1[0], STDIN_FILENO);
-			close(pp2[0]);
-			dup2(pp2[1], STDOUT_FILENO);
-			dup2(STDOUT_FILENO, STDERR_FILENO);
-			setpgrp();
-			execve(command, (char *const *)argv, (char *const *)envv);
-			perror("Internal error, execve fails");
-			abort(); //end of child
-		}
-		if (pid == -1) {
-			executionError = true;
-			sprintf(executionErrorReason, "Internal error: fork error (%s)", strerror(errno));
-			return;
-		}
-		int perfFd = startPerfCounting(pid);
-		close(pp1[0]);
-		close(pp2[1]);
-		int fdwrite = pp1[1];
-		int fdread = pp2[0];
-		Tools::fdblock(fdwrite, false);
-		Tools::fdblock(fdread, false);
-		programInput = input;
-		if (programInput.size() == 0) { // No input
-			close(fdwrite);
-		}
-		programOutputBefore = "";
-		programOutputAfter = "";
-		pid_t pidr;
-		int status;
-		exitCode = numeric_limits<int>::min();
-		//Added by Tamar
-		auto startInMs = chrono::high_resolution_clock::now();
-		struct rusage ru;
-		while ((pidr = wait4(pid, &status, WNOHANG | WUNTRACED, &ru)) == 0) {
-			readWrite(fdread, fdwrite);
-			usleep(5000);
-
-			// TERMSIG or timeout or program output too large?
-			if (Stop::isTERMRequested() || (time(NULL) - start) >= timeout || outputTooLarge) { //Changed by Tamar
-				
-				//Added by Tamar
-				//if ((now - startInMs) >= timeoutInMs && timeoutInMs != chrono::milliseconds(0)) {
-				//    programTimeoutInMs = true;
-				//}
-
-				if ((time(NULL) - start) >= timeout) {
-					programTimeout = true;
-				}
-				kill(pid, SIGTERM); // Send SIGTERM normal termination
-				int otherstatus;
-				usleep(5000);
-				if (waitpid(pid, &otherstatus, WNOHANG | WUNTRACED) == pid) {
-					break;
-				}
-				if (kill(pid, SIGQUIT) == 0) { // Kill
-					break;
-				}
-			}
-		}
-		this->cpuInstructions = stopPerfCounting(perfFd);
-		//Added by Tamar
-		auto endInMs = chrono::high_resolution_clock::now();
-		elapsedTime = chrono::duration_cast<chrono::milliseconds>(endInMs - startInMs);
-		userTime = ru.ru_utime;
-		systemTime = ru.ru_stime;
-
-		if (pidr == pid) {
-			if (WIFSIGNALED(status)) {
-				int signal = WTERMSIG(status);
-				executionError = true;
-				sprintf(executionErrorReason, "Program terminated due to \"%s\" (%d)\n", strsignal(signal), signal);
-			}
-			if (WIFEXITED(status)) {
-				exitCode = WEXITSTATUS(status);
-			} else {
-				executionError = true;
-				strcpy(executionErrorReason, "Program terminated but unknown reason.");
-			}
-
-			//Added by Tamar
-			struct rusage ru;
-			if (getrusage(RUSAGE_CHILDREN, &ru) == 0) {
-				maxResidentSetSize = ru.ru_maxrss; // In kilobytes
-			}
-
-
-		} else if (pidr != 0) {
-			executionError = true;
-			strcpy(executionErrorReason, "waitpid error");
-		}
-		readWrite(fdread, fdwrite);
-		correctExitCode = isExitCodeTested() && expectedExitCode == exitCode;
-		correctOutput = match(programOutputAfter) || match(programOutputBefore + programOutputAfter);
-
-	}
-
-
-	// Main runTest function
-	void TestCase::runTestWithCompare(time_t timeout, chrono::milliseconds timeoutInMs) {
-		time_t start = time(NULL);
-		input = processArrayInput(input);
-		elapsedTime = chrono::milliseconds(0);
-		maxResidentSetSize = 0;
-		userTime = {0, 0};
-		systemTime = {0, 0};
-
-		teacherCommand = "./vpl_test_teacher";
-
-		if (!programToRun.empty() && programToRun.size() < 512) {
-			command = programToRun.c_str();
-			teacherCommand = "./inputFile2.sh"; // Update as necessary
-		}
-
-		if (!Tools::existFile(command)) {
-			executionError = true;
-			sprintf(executionErrorReason, "Execution file not found '%s'", command);
-			return;
-		}
-
-		if (!Tools::existFile(teacherCommand)) {
-			executionError = true;
-			sprintf(executionErrorReason, "Execution file not found '%s'", teacherCommand);
-			return;
-		}
-
-		if (programArgs.size() > 0) {
-			splitArgs(programArgs);
-		}
-
-		// Initialize ProcessInfo structs for student and teacher
-		ProcessInfo studentProcess, teacherProcess;
-		studentProcess.command = command;
-		teacherProcess.command = teacherCommand;
-
-		// Set up pipes
-		if (!setupPipes(studentProcess) || !setupPipes(teacherProcess)) {
-			return;
-		}
-
-		// Start processes
-		if (!startProcess(studentProcess, argv, envv)) {
-			return;
-		}
-
-		if (!startProcess(teacherProcess, argv, envv)) {
-			return;
-		}
-
-		// Close unused pipe ends
-		closeUnusedPipeEnds(studentProcess);
-		closeUnusedPipeEnds(teacherProcess);
-
-		// Set non-blocking mode for output pipes
-		Tools::fdblock(studentProcess.outPipe[0], false);
-		Tools::fdblock(teacherProcess.outPipe[0], false);
-
-		// Write input to both processes
-		programInput = input;
-		if (!programInput.empty()) {
-			if (programInput.back() != '\n') {
-				programInput += '\n';
-			}
-			writeInputToProcess(studentProcess, programInput);
-			writeInputToProcess(teacherProcess, programInput);
-		}
-
-		// Start times for each process
-		auto startTime = chrono::high_resolution_clock::now();
-		studentProcess.startTime = startTime;
-		teacherProcess.startTime = startTime;
-
-		// Main loop to monitor both processes
-		while (!studentProcess.finished || !teacherProcess.finished) {
-			// Use select() to monitor both output pipes
-			fd_set readfds;
-			FD_ZERO(&readfds);
-			int maxfd = 0;
-
-			if (!studentProcess.finished) {
-				FD_SET(studentProcess.outPipe[0], &readfds);
-				if (studentProcess.outPipe[0] > maxfd) maxfd = studentProcess.outPipe[0];
-			}
-			if (!teacherProcess.finished) {
-				FD_SET(teacherProcess.outPipe[0], &readfds);
-				if (teacherProcess.outPipe[0] > maxfd) maxfd = teacherProcess.outPipe[0];
-			}
-
-			struct timeval tv;
-			tv.tv_sec = 0;
-			tv.tv_usec = 5000; // 5ms timeout
-
-			int ret = select(maxfd + 1, &readfds, NULL, NULL, &tv);
-			if (ret > 0) {
-				// Read from student output
-				if (!studentProcess.finished && FD_ISSET(studentProcess.outPipe[0], &readfds)) {
-					readFromPipe(studentProcess.outPipe[0], studentProcess.output);
-				}
-				// Read from teacher output
-				if (!teacherProcess.finished && FD_ISSET(teacherProcess.outPipe[0], &readfds)) {
-					readFromPipe(teacherProcess.outPipe[0], teacherProcess.output);
-				}
-			}
-
-			// Check if student process has terminated
-			if (!studentProcess.finished) {
-				checkProcessTermination(studentProcess);
-				if (studentProcess.finished) {
-					exitCode = studentProcess.exitCode;
-					userTime = studentProcess.userTime;
-					systemTime = studentProcess.systemTime;
-					maxResidentSetSize = studentProcess.maxResidentSetSize;
-					elapsedTime = studentProcess.elapsedTime;
-				}
-			}
-
-			// Check if teacher process has terminated
-			if (!teacherProcess.finished) {
-				checkProcessTermination(teacherProcess);
-			}
-
-			// Check for termination conditions (timeout, etc.)
-			if (Stop::isTERMRequested() || (time(NULL) - start) >= timeout || outputTooLarge) {
-				if ((time(NULL) - start) >= timeout) {
-					programTimeout = true;
-				}
-				if (!studentProcess.finished) {
-					kill(studentProcess.pid, SIGTERM);
-					usleep(3000);
-					waitpid(studentProcess.pid, NULL, WNOHANG | WUNTRACED);
-					kill(studentProcess.pid, SIGQUIT);
-					studentProcess.finished = true;
-				}
-				if (!teacherProcess.finished) {
-					kill(teacherProcess.pid, SIGTERM);
-					usleep(3000);
-					waitpid(teacherProcess.pid, NULL, WNOHANG | WUNTRACED);
-					kill(teacherProcess.pid, SIGQUIT);
-					teacherProcess.finished = true;
-				}
-				break;
-			}
-		}
-
-		// Read any remaining data from pipes
-		if (!studentProcess.finished) {
-			readFromPipe(studentProcess.outPipe[0], studentProcess.output);
-			close(studentProcess.outPipe[0]);
-		}
-		if (!teacherProcess.finished) {
-			readFromPipe(teacherProcess.outPipe[0], teacherProcess.output);
-			close(teacherProcess.outPipe[0]);
-		}
-
-		correctExitCode = isExitCodeTested() && expectedExitCode == exitCode;
-		correctOutput = match(studentProcess.output) || match(programOutputBefore + studentProcess.output);
-
-		compareAndPrintResults(studentProcess, teacherProcess);
-=======
     time_t start = time(NULL);
     input = processArrayInput(input);
     elapsedTime = chrono::milliseconds(0);
@@ -2974,22 +2665,6 @@ uint64_t stopPerfCounting(int fd) {
 void Evaluation::outputEvaluation() {
     const char* stest[] = {" test", " tests"};
 
-<<<<<<< HEAD
-			// Added by Tamar
-			//printf("-Tests run time--\n");
-			// for (size_t i = 0; i < testCases.size(); ++i) {
-			//     // Convert elapsedTime to milliseconds before printing
-			//     chrono::duration<double, milli> elapsed_ms = testCases[i].getElapsedTime();
-			//     printf("Test %d run time: %f ms\n", (int)i + 1, elapsed_ms.count());
-			// }
-			cout << left << setw(25) << "Test Case Name"
-          << setw(15) << "Input Size"
-          << setw(20) << "Run Time (ms)"
-		  << setw(20) << "CPU Time (ms)"
-		  << setw(15) << "CPU Inst" //michal
-          << setw(20) << "Memory (KB)"
-          << endl;
-=======
     if (strlen(executionErrorReason) > 0) {
         printf("\nExecution error: %s\n", executionErrorReason);
     }
@@ -3001,27 +2676,7 @@ void Evaluation::outputEvaluation() {
         printf("--|>\n");
     }
 
-<<<<<<< HEAD
-			for (size_t i = 0; i < testCases.size(); ++i) {
-				string testName = testCases[i].getCaseDescription();
-				string inputSize = testCases[i].getInputSize();
-				chrono::duration<double, milli> elapsed_ms = testCases[i].getElapsedTime();
-				long memoryKB = testCases[i].maxResidentSetSize;
-				double userTime_ms = testCases[i].userTime.tv_sec * 1000.0 + testCases[i].userTime.tv_usec / 1000.0;
-				double systemTime_ms = testCases[i].systemTime.tv_sec * 1000.0 + testCases[i].systemTime.tv_usec / 1000.0;
-				double totalCpuTime_ms = userTime_ms + systemTime_ms;
-				uint64_t inst = testCases[i].getcpuInstructions(); // <-- added michal
 
-
-				cout << left << setw(25) << testName
-						<< setw(15) << inputSize
-						<< setw(20) << fixed << setprecision(2) << elapsed_ms.count()
-						<< setw(20) << totalCpuTime_ms
-						<< setw(15) << inst              // <-- added michal
-						<< setw(20) << memoryKB
-						<< endl;
-			}
-=======
     if (ncomments > 1) {
         printf("\n<|--\n");
         printf("-Failed tests\n");
@@ -3057,6 +2712,7 @@ void Evaluation::outputEvaluation() {
              << setw(15) << "Input Size"
              << setw(20) << "Run Time (ms)"
              << setw(20) << "CPU Time (ms)"
+			 << setw(15) << "CPU Inst" //michal
              << setw(20) << "Memory (KB)"
              << setw(20) << "Student Run Time (ms)"
              << endl;
@@ -3071,6 +2727,7 @@ void Evaluation::outputEvaluation() {
             double userTime_ms = testCases[i].userTime.tv_sec * 1000.0 + testCases[i].userTime.tv_usec / 1000.0;
             double systemTime_ms = testCases[i].systemTime.tv_sec * 1000.0 + testCases[i].systemTime.tv_usec / 1000.0;
             double totalCpuTime_ms = userTime_ms + systemTime_ms;
+			uint64_t inst = testCases[i].getcpuInstructions(); // <-- added michal
             double studentRunTime = testCases[i].getStudentRunTime();
              cout << setw(20) << fixed << setprecision(6) << studentRunTime << endl;
         
@@ -3080,6 +2737,7 @@ void Evaluation::outputEvaluation() {
                  << setw(15) << inputSize
                  << setw(20) << fixed << setprecision(6) << elapsed_ms.count()
                  << setw(20) << fixed << setprecision(6) << totalCpuTime_ms
+				 << setw(15) << inst              // <-- added michal
                  << setw(20) << memoryKB
                  << setw(20) << fixed << setprecision(6) << studentRunTime
                  << endl;
