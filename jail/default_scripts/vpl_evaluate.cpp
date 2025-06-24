@@ -1397,12 +1397,10 @@ void TestCase::setStudentRunTime(double runTime) {
 	}
 
 	//added by michal
-	uint64_t TestCase::getcpuInstructions(){
+	uint64_t TestCase::get(){
 		return cpuInstructions;
 	}
-
 	string TestCase::getCommentTitle(bool withGradeReduction) {
->>>>>>> origin/I2_Team
 		char buf[100];
 		string ret;
 		sprintf(buf, "Test %d", id);
@@ -1820,47 +1818,6 @@ void TestCase::compareAndPrintResults(const ProcessInfo& studentProcess, const P
 		cout << "Memory Usage Ratio: " << memoryRatio << "\n\n";
 	}
 
-  int perf_event_open(struct perf_event_attr *hw_event, pid_t pid, int cpu,
-	int group_fd, unsigned long flags) {
-	  return syscall(__NR_perf_event_open, hw_event, pid, cpu, group_fd, flags);
-}
-
-int startPerfCounting(pid_t pid) {
-	struct perf_event_attr pe{};
-	memset(&pe, 0, sizeof(struct perf_event_attr));
-	pe.type = PERF_TYPE_HARDWARE;
-	pe.size = sizeof(struct perf_event_attr);
-	pe.config = PERF_COUNT_HW_INSTRUCTIONS;
-	pe.disabled = 1;
-	pe.exclude_kernel = 1;
-	pe.exclude_hv = 1;
-	int fd = perf_event_open(&pe, pid, -1, -1, 0);
-	if (fd == -1) {
-		std::cerr << "Error opening perf event: " << strerror(errno) << "\n";
-		return -1;
-	}
-	if (ioctl(fd, PERF_EVENT_IOC_RESET, 0) == -1) {
-		std::cerr << "Failed to reset perf counter: " << strerror(errno) << "\n";
-	}
-	if (ioctl(fd, PERF_EVENT_IOC_ENABLE, 0) == -1) {
-		std::cerr << "Failed to enable perf counter: " << strerror(errno) << "\n";
-	}
-	return fd;
-}
-
-uint64_t stopPerfCounting(int fd) {
-	ioctl(fd, PERF_EVENT_IOC_DISABLE, 0);
-	uint64_t count = 0;
-	ssize_t res = read(fd, &count, sizeof(count));
-	if (res != sizeof(count)) {
-		std::cerr << "Error reading perf counter\n";
-		count = 0;
-	}
-	close(fd);
-	return count;
-}
-
-
 
 	void TestCase::runTest(time_t timeout, chrono::milliseconds timeoutInMs) { //Changed by Tamar
     time_t start = time(NULL);
@@ -2029,7 +1986,6 @@ uint64_t stopPerfCounting(int fd) {
 	userTime = {0, 0};
 	systemTime = {0, 0};
 	measuredTime = 0;
->>>>>>> origin/I2_Team
 
 	if (!programToRun.empty() && programToRun.size() < 512) {
 		command = programToRun.c_str();
@@ -2668,7 +2624,6 @@ void Evaluation::outputEvaluation() {
     if (strlen(executionErrorReason) > 0) {
         printf("\nExecution error: %s\n", executionErrorReason);
     }
->>>>>>> origin/I2_Team
 
     if (testCases.size() == 0) {
         printf("<|--\n");
@@ -2712,7 +2667,7 @@ void Evaluation::outputEvaluation() {
              << setw(15) << "Input Size"
              << setw(20) << "Run Time (ms)"
              << setw(20) << "CPU Time (ms)"
-			 << setw(15) << "CPU Inst" //michal
+			 << setw(15) << "CPU Inst"
              << setw(20) << "Memory (KB)"
              << setw(20) << "Student Run Time (ms)"
              << endl;
@@ -2755,9 +2710,6 @@ void Evaluation::outputEvaluation() {
 
     fflush(stdout);
 }
-
-
->>>>>>> origin/I2_Team
 
 
 	void nullSignalCatcher(int n) {
