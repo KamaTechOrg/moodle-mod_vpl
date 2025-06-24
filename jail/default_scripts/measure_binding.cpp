@@ -12,6 +12,15 @@
 #include <cstdint>
 #include <iostream>
 
+namespace py = pybind11;
+
+uint64_t cpuInstructions;
+uint64_t getcpuInstructions();
+
+uint64_t getcpuInstructions(){
+    return cpuInstructions;
+}
+
 int perf_event_open(struct perf_event_attr* hw_event, pid_t pid, int cpu, int group_fd, unsigned long flags) {
     return syscall(__NR_perf_event_open, hw_event, pid, cpu, group_fd, flags);
 }
@@ -40,18 +49,22 @@ int startPerfCounting(pid_t pid) {
 uint64_t stopPerfCounting(int fd) {
     ioctl(fd, PERF_EVENT_IOC_DISABLE, 0);
     uint64_t count = 0;
-    read(fd, &count, sizeof(count));
+    ssize_t res = read(fd, &count, sizeof(count));
+    if (res != sizeof(count)) {
+        std::cerr << "Error reading perf counter\n";
+        count = 0;
+    }
     close(fd);
     return count;
 }
 
 
-namespace py = pybind11;
-
 static std::chrono::high_resolution_clock::time_point start_time;
+static int perfFd = -1;
 
 void start_measurement() {
     start_time = std::chrono::high_resolution_clock::now();
+    perfFd = startPerfCounting(getpid()); // מודד על תהליך נוכחי
 }
 
 void end_measurement() {
@@ -59,16 +72,42 @@ void end_measurement() {
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time);
     long long duration_us = duration.count();
 
-    char buf[32];
-    std::snprintf(buf, sizeof(buf), "%lld\n", duration_us);
+    uint64_t instructions = 0;
+    if(perfFd != -1){
+        instructions = stopPerfCounting(perfFd);
+        perfFd = -1;
+    }
 
     if (fcntl(3, F_GETFD) == -1) {
+        std::cerr << "[DEBUG] FD 3 is not open\n";
         return;
     }
 
+    char buf[128];
+    std::snprintf(buf, sizeof(buf), "instructions=%lu\nduration_us=%lld\n", instructions, duration_us);
+
     ssize_t bytes_written = write(3, buf, std::strlen(buf));
-    (void)bytes_written; 
-    fsync(3);
+    if (bytes_written == -1) {
+        std::cerr << "[DEBUG] Write to FD 3 failed: " << strerror(errno) << "\n";
+    } 
+
+    // כתיבה נוספת מתעלמת מתוצאה כדי למנוע אזהרות במידת הצורך
+    if(fcntl(3, F_GETFD) != -1){
+        ssize_t res = write(3, buf, std::strlen(buf));
+        (void)res;
+        fsync(3);
+    }
+
+    //char buf[32];
+    //std::snprintf(buf, sizeof(buf), "%lld\n", duration_us);
+
+    // if (fcntl(3, F_GETFD) == -1) {
+    //     return;
+    // }
+
+    // ssize_t bytes_written = write(3, buf, std::strlen(buf));
+    // (void)bytes_written; 
+    // fsync(3);
 }
 
 PYBIND11_MODULE(measure, m) {
