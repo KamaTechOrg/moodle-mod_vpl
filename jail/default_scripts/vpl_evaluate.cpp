@@ -1396,8 +1396,7 @@ void TestCase::setStudentRunTime(double runTime) {
 		return inputSize;
 	}
 
-	//added by michal
-	uint64_t TestCase::get(){
+	uint64_t TestCase::getcpuInstructions(){
 		return cpuInstructions;
 	}
 	string TestCase::getCommentTitle(bool withGradeReduction) {
