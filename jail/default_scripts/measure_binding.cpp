@@ -91,16 +91,6 @@ void end_measurement() {
         fsync(3);
     }
 
-    //char buf[32];
-    //std::snprintf(buf, sizeof(buf), "%lld\n", duration_us);
-
-    // if (fcntl(3, F_GETFD) == -1) {
-    //     return;
-    // }
-
-    // ssize_t bytes_written = write(3, buf, std::strlen(buf));
-    // (void)bytes_written; 
-    // fsync(3);
 }
 
 PYBIND11_MODULE(measure, m) {
