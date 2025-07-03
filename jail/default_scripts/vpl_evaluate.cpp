@@ -5,29 +5,20 @@
 	 * @Author Juan Carlos Rodríguez-del-Pino <jcrodriguez@dis.ulpgc.es>
 	 */
 
+// ===== Kernel headers (perf_event) =====
+#include <linux/perf_event.h>
+#include <asm/unistd.h>
+#include <sys/ioctl.h>
+#include <sys/syscall.h>
 
-	
-	#include <cstdlib>
-	#include <cstdio>
-	#include <climits>
-	#include <limits>
-	#include <errno.h>
-	#include <sys/types.h>
-	#include <sys/wait.h>
-	#include <poll.h>
-	#include <unistd.h>
-	#include <pty.h>
-	#include <fcntl.h>
-	#include <signal.h>
-	#include <cstring>
-	#include <string>
-	#include <iostream>
-	#include <sstream>
-	#include <vector>
-	#include <cmath>
-	#include <execinfo.h>
-	#include <regex.h>
-	#include <string>
+// ===== C standard library headers =====
+#include <cstdlib>
+#include <cstdio>
+#include <cerrno>
+#include <climits>
+#include <cstring>
+#include <cmath>
+#include <cstdint>
 
 	//Added by Tamar
 	#include <chrono>
@@ -39,6 +30,39 @@
     #include <fcntl.h>
 	#include "json.hpp"
 
+// ===== POSIX / Unix system headers =====
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <poll.h>
+//#include <pty.h>      // Requires libutil-dev
+#if defined(__APPLE__)
+    #include <util.h>
+#else
+    #include <pty.h>
+#endif
+//#include <util.h>     // May require libbsd-dev
+#include <fcntl.h>
+#include <signal.h>
+#include <sys/resource.h>
+#include <string>
+#include <execinfo.h>
+#include <regex.h>
+
+
+// ===== C++ standard library headers =====
+#include <iostream>
+#include <sstream>
+#include <fstream>
+#include <vector>
+#include <chrono>
+#include <random>
+#include <regex>
+#include <iomanip>
+#include <limits>
+
+// ===== Project-specific headers =====
+#include "json.hpp"
 
 	using namespace std;
 
@@ -262,7 +286,6 @@
 		//Added by Tamar
 		void addInputSize(string );
 		string getInputSize();
-
 	};
 
 
@@ -317,6 +340,8 @@
 		int expectedExitCode; // Default value numeric_limits<int>::min()
 		int exitCode; // Default value numeric_limits<int>::min()
 		string programOutputBefore, programOutputAfter, programInput;
+
+		uint64_t cpuInstructions;
   	    std::chrono::duration<double, std::milli> studentRunTime;
 
 		//Added by Tamar
@@ -354,6 +379,7 @@
 
 		//Added by Tamar
 		string getInputSize();
+		uint64_t getcpuInstructions();
 
     string getCommentTitle(bool withGradeReduction = false);
 		string getComment();
@@ -421,7 +447,7 @@
 		void addFatalError(const char *m);
 		void runTests();
 		void outputEvaluation();
-		void initializeVectors(vector<double>& runtimes, vector<long>& inputSizes, size_t numCases);
+        void initializeVectors(vector<double>& runtimes, vector<long>& inputSizes, size_t numCases);
         void analyzePerformance(const vector<double>& runtimes, const vector<long>& inputSizes);
 	};
 
@@ -1262,6 +1288,8 @@
 	    systemTime = o.systemTime;
 	    cpuTimeRatio = o.cpuTimeRatio;
 	    measuredTime = o.measuredTime;
+		cpuInstructions=0;
+
 		for(size_t i = 0; i < o.output.size(); i++){
 			output.push_back(o.output[i]->clone());
 		}
@@ -1382,6 +1410,9 @@
 		return inputSize;
 	}
 
+	uint64_t TestCase::getcpuInstructions(){
+		return cpuInstructions;
+	}
 	string TestCase::getCommentTitle(bool withGradeReduction) {
 		char buf[100];
 		string ret;
@@ -1759,7 +1790,7 @@ bool TestCase::setupPipes(ProcessInfo& process) {
 		}
 	}
 
-void TestCase::compareAndPrintResults(const ProcessInfo& studentProcess, const ProcessInfo& teacherProcess, double measured_time) {
+    void TestCase::compareAndPrintResults(const ProcessInfo& studentProcess, const ProcessInfo& teacherProcess, double measured_time) {
 		// Print the comparison results
         cout << "Student vs. Teacher Comparison:\n";
         cout << left << setw(15) << "Variation"
@@ -1795,10 +1826,8 @@ void TestCase::compareAndPrintResults(const ProcessInfo& studentProcess, const P
 
 		// Set formatting for decimal places
 		cout << fixed << setprecision(2);
-
 		cout << "Runtime Ratio: " << cpuTimeRatio << "\n";
 		cout << "Memory Usage Ratio: " << memoryRatio << "\n\n";
-
     }
 
 	void TestCase::runTest(time_t timeout, chrono::milliseconds timeoutInMs) { //Changed by Tamar
@@ -1957,8 +1986,6 @@ void TestCase::compareAndPrintResults(const ProcessInfo& studentProcess, const P
     correctOutput = match(programOutputBefore + programOutputAfter) || match(programOutputAfter);
 }
 
-
-
 	// Main runTest function
 	void TestCase::runTestWithCompare(time_t timeout, chrono::milliseconds timeoutInMs) {
 	time_t start = time(NULL);
@@ -2113,10 +2140,6 @@ void TestCase::compareAndPrintResults(const ProcessInfo& studentProcess, const P
 }
 
 
-
-
-
-
 	bool TestCase::match(string data) {
 		for (size_t i = 0; i < output.size(); i++)
 			if (output[i]->match(data))
@@ -2139,8 +2162,6 @@ void TestCase::compareAndPrintResults(const ProcessInfo& studentProcess, const P
 
 		//Added by Tamar
 		strcpy(executionErrorReason, "");
-		bestComplexity = "";
-        mse = 0.0;
 	}
 	const char** TestCase::envv = nullptr;
 
@@ -2420,9 +2441,6 @@ void TestCase::compareAndPrintResults(const ProcessInfo& studentProcess, const P
 		grade = grademin;
 	}
 
-
-
-	
 	#include <fstream>
 	#include <iostream>
 
@@ -2441,13 +2459,10 @@ void TestCase::compareAndPrintResults(const ProcessInfo& studentProcess, const P
 			: testId(id), cpuTimeRatio(ratio) {}
 	};
 
-
 	// Function to load configuration from a JSON file
 	Config loadConfig(const string& filename) {
 		Config config;
 		ifstream configFile(filename);
-
-		
 		try {
 			nlohmann::json jsonConfig;
 			configFile >> jsonConfig;
@@ -2478,7 +2493,6 @@ void TestCase::compareAndPrintResults(const ProcessInfo& studentProcess, const P
 		} catch (std::exception& e) {
 			std::cerr << "Unexpected Error: " << e.what() << ". Using default configuration." << std::endl;
 		}
-
 
 		return config;
 	}
@@ -2548,8 +2562,6 @@ void TestCase::compareAndPrintResults(const ProcessInfo& studentProcess, const P
 		testResults.erase(it, testResults.end());
 	}
 
-
-
 	void Evaluation::runTests() {
 		Config config;
 		bool isCompetition = false;
@@ -2566,7 +2578,6 @@ void TestCase::compareAndPrintResults(const ProcessInfo& studentProcess, const P
 		grade = grademax;
 		float defaultGradeReduction = (grademax - grademin) / testCases.size();
 		int timeout = maxtime / testCases.size();
-
 		vector<double> runtimes;
 		vector<long> inputSizes;
 	    initializeVectors(runtimes, inputSizes, testCases.size());
@@ -2712,14 +2723,15 @@ void TestCase::compareAndPrintResults(const ProcessInfo& studentProcess, const P
 			printf("--|>\n");
 		}
 
-		if (ncomments > 1) {
-			printf("\n<|--\n");
-			printf("-Failed tests\n");
-			for (int i = 0; i < ncomments; i++) {
-				printf("%s", titles[i]);
-			}
-			printf("--|>\n");
-		}
+
+    	if (ncomments > 1) {
+        printf("\n<|--\n");
+        printf("-Failed tests\n");
+        for (int i = 0; i < ncomments; i++) {
+            printf("%s", titles[i]);
+        }
+        printf("--|>\n");
+    	}
 
 		if (ncomments > 0) {
 			printf("\n<|--\n");
@@ -2741,12 +2753,13 @@ void TestCase::compareAndPrintResults(const ProcessInfo& studentProcess, const P
 			printf(">+------------------------------+\n");
 			printf("\n--|>\n\n");
 
-			// הדפסת כותרות הטבלה בפורמט אחיד
+        	// הדפסת כותרות הטבלה בפורמט אחיד
 			cout << left
 				<< setw(25) << "Test Case Name"
 				<< setw(15) << "Input Size"
 				<< setw(20) << "Run Time (ms)"
 				<< setw(20) << "CPU Time (ms)"
+				<< setw(15) << "CPU Inst"
 				<< setw(20) << "Memory (KB)"
 				<< setw(20) << "Student Run Time (ms)"
 				<< endl;
@@ -2761,6 +2774,7 @@ void TestCase::compareAndPrintResults(const ProcessInfo& studentProcess, const P
 				double userTime_ms = testCases[i].userTime.tv_sec * 1000.0 + testCases[i].userTime.tv_usec / 1000.0;
 				double systemTime_ms = testCases[i].systemTime.tv_sec * 1000.0 + testCases[i].systemTime.tv_usec / 1000.0;
 				double totalCpuTime_ms = userTime_ms + systemTime_ms;
+				uint64_t inst = testCases[i].getcpuInstructions(); // <-- added michal
 				double studentRunTime = testCases[i].getStudentRunTime();
 				cout << setw(20) << fixed << setprecision(6) << studentRunTime << endl;
 			
@@ -2770,18 +2784,20 @@ void TestCase::compareAndPrintResults(const ProcessInfo& studentProcess, const P
 					<< setw(15) << inputSize
 					<< setw(20) << fixed << setprecision(6) << elapsed_ms.count()
 					<< setw(20) << fixed << setprecision(6) << totalCpuTime_ms
+					<< setw(15) << inst              // <-- added michal
 					<< setw(20) << memoryKB
 					<< setw(20) << fixed << setprecision(6) << studentRunTime
 					<< endl;
 			}
-		}
 
-		if (!bestComplexity.empty()) {
-				printf("\n<|--\n");
-				printf("-Performance Analysis\n");
-				printf("Identified time complexity: %s\n", bestComplexity.c_str());
-				printf("MSE: %.6f\n", mse);
-				printf("--|>\n");
+			
+			if (!bestComplexity.empty()) {
+                printf("\n<|--\n");
+                printf("-Performance Analysis\n");
+                printf("Identified time complexity: %s\n", bestComplexity.c_str());
+                printf("MSE: %.6f\n", mse);
+                printf("--|>\n");
+            }
 		}
 
 		if (!noGrade) {
@@ -2794,7 +2810,10 @@ void TestCase::compareAndPrintResults(const ProcessInfo& studentProcess, const P
 		}
 
 		fflush(stdout);
-	}
+		
+    }
+
+	
 
 	void nullSignalCatcher(int n) {
 		//printf("Signal %d\n",n);
